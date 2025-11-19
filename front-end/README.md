@@ -1,36 +1,127 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PitchLens — Message Intelligence Engine
 
-## Getting Started
+PitchLens is a modern, conversion-focused messaging tool that helps teams craft messages that resonate with their audience. This repository contains the front-end UI, built with Next.js and Tailwind CSS. It demonstrates a complete message analysis and improvement workflow with a focus on clarity, design, and conversion.
 
-First, run the development server:
+---
 
-```bash
+## Key Features
+
+- Analyze messages for clarity, emotional resonance, credibility, and market effectiveness.
+- Provide AI-powered rewrite suggestions with tone and persona adjustments.
+- Visual scoring dashboard and actionable recommendations.
+- Badge generation for publishing verified scores on external websites.
+
+---
+
+## Pages & Workflow
+
+- `/` — Landing page with feature highlights and CTAs.
+- `/app` — Core app interface where users can paste text or provide a URL and run an analysis.
+- `/dashboard` — Score breakdown and recommendations for improvement.
+- `/badges` — Badge customization, downloads, and embed code.
+
+---
+
+## Development & Installation
+
+Prerequisites
+
+- Node.js (v18+)
+- npm (or yarn / pnpm)
+
+Commands (from project root)
+
+```powershell
+# install dependencies
+npm install
+
+# start the development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+
+# build for production
+npm run build
+
+# start production server
+npm run start
+# lint the project
+npm run lint
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open `http://localhost:3000` in your browser to preview the application.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How to Use the App (User Workflow)
 
-## Learn More
+1. Open the App: Navigate to `/app` in the browser.
+2. Paste your text or enter a URL: Provide content for analysis.
+3. Click **Analyze Message**: This runs the UI demo analysis.
+4. Compare Before / After: View the original message and recommended rewrite.
+5. Adjust Tone and Persona: Tweak tone using the slider and pick a persona to see different suggestions.
+6. Apply Rewrite: Accept suggestions and view the updated message on the Dashboard.
+7. Create Badge: Visit `/badges` to generate, preview, and copy the embed code or download an image.
 
-To learn more about Next.js, take a look at the following resources:
+> Note: The current front-end includes mock data and UI-only behavior. Integrate an AI backend (API) to replace the demo logic with real analysis.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Project Structure
 
-## Deploy on Vercel
+```
+front-end/
+├─ app/ (Next.js app routes: landing, app, dashboard, badges)
+├─ components/ (reusable UI components like Navbar, Card, Button, ScoreCircle)
+├─ public/ (assets)
+├─ app/globals.css (global styles and brand palette)
+├─ package.json
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Extending & Integrating a Backend
+
+1. Add a server/API endpoint (e.g. `/api/analyze`) that accepts message text and returns analysis JSON.
+2. Update UI calls to use fetch/XHR to connect to the API endpoint and replace mocked results.
+3. Optionally, add authentication and data storage for saved messages.
+
+Example API output format:
+
+```json
+{
+  "score": 84,
+  "clarity": 92,
+  "emotion": 80,
+  "credibility": 78,
+  "suggestion": "Rewritten message text",
+  "insights": ["Add case study", "Include CTA"]
+}
+```
+
+---
+
+## Design & Conventions
+
+- Minimal, Google-like styling using Tailwind utilities
+- Large whitespace, rounded cards, soft gradients
+- Smooth micro-animations and transitions
+- Accessible contrast and typographic scale
+
+---
+
+## Contributing
+
+Contributions are welcome! When submitting contributions:
+
+1. Fork the repo and create a feature branch.
+2. Follow Tailwind styles and design conventions.
+3. Add tests where relevant and update the README where needed.
+
+---
+
+## License & Credits
+
+This project is a sample UI for demonstration purposes. Please review the license for any third-party tools or packages.
+
+---
+
+If you’d like, I can add a small `.env.example` and demo serverless API to show how to integrate the AI backend next. Let me know which option you prefer and I’ll add it.
