@@ -120,6 +120,3 @@ Contributions are welcome! When submitting contributions:
 
 ## License & Credits
 
-This project is a sample UI for demonstration purposes. Please review the license for any third-party tools or packages.
-
----
