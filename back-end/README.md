@@ -85,37 +85,3 @@ Health check endpoint.
   "version": "1.0.0"
 }
 ```
-
-## Development Workflow
-
-1. Implement analysis logic in `app.py`
-2. Add AI/NLP models for text analysis (consider libraries like spaCy, NLTK, or Hugging Face Transformers)
-3. Test endpoints using tools like Postman or curl
-4. Integrate with front-end by updating API calls in the Next.js app
-
-## Integration with Front-End
-
-Update the front-end's analysis functions to call this API instead of using mock data. Example:
-
-```javascript
-const response = await fetch('http://localhost:8000/analyze', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ message: userInput })
-});
-const data = await response.json();
-```
-
-## Deployment
-
-For production deployment:
-- Use a WSGI server like Gunicorn
-- Consider containerization with Docker
-- Add authentication and rate limiting
-- Deploy to cloud platforms (Azure, AWS, etc.)
-
-## Contributing
-
-1. Follow Python best practices and add type hints
-2. Write unit tests for analysis functions
-3. Update this README for any new endpoints or features
