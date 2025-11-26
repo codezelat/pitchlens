@@ -39,31 +39,109 @@ class AnalyzeResponse(BaseModel):
     
 def run_simple_analysis(message: str, tone: str, persona: str) -> AnalyzeResponse:
     """
-    Simple mock scoring based on message length and keywords.
-    Later this can be replaced with real AI/NLP logic.
+    improved mock analysis logic for demonstration purposes.
     """
     text = message.strip()
-
-    # Basic scoring rules
-    clarity = min(100, len(text) // 10 * 10)
-    emotion = 75 if any(word in text.lower() for word in ["exciting", "amazing", "love"]) else 60
-    credibility = 80 if len(text) > 50 else 60
-    market_effectiveness = (clarity + emotion + credibility) // 3
+    lower_text = text.lower()
+    
+    # 1. clarity score based on length
+    length = len(text)
+    
+    # base clarity from length
+    if length < 40:
+        clarity = 50
+    elif length < 120:
+        clarity = 75
+    elif length <= 300:
+        clarity = 90
+    else:
+        clarity = 80 # too long can hurt clarity
+        
+    # for having multiple sentences
+    sentence_count = text.count('.') + text.count('!') + text.count('?')
+    if sentence_count >= 2:
+        clarity += 5
+        
+    clarity = max(0, min(100, clarity))
+    
+    # 2. Emotion
+    positive_words = ["exciting", "amazing", "love", "delighted" "great", "success", "powerful", "win", "thrilled", "fantastic", "wonderful"]
+    emotional_hits = sum(1 for word in positive_words if word in lower_text)
+    
+    if emotional_hits == 0:
+        emotion = 55
+    elif emotional_hits == 1:
+        emotion = 70
+    elif emotional_hits == 2:
+        emotion = 80
+    else:
+        emotion = 90 #very emotional
+        
+    # tone based adjustment
+    if tone == "professional":
+        emotion -= 5
+    elif tone == "enthusiastic":
+        emotion += 5
+        
+    emotion = max(0, min(100, emotion))
+    
+    # 3. Credibility
+    credibility_words = ["data", "research", "proven", "studies", "statistics", "evidence", "results", "facts"]
+    credibility_hits = sum(1 for word in credibility_words if word in lower_text)
+    
+    #number / percentages look credible
+    has_numbers = any(char.isdigit() for char in text)
+    
+    credibility = 50
+    if has_numbers:
+        credibility += 15
+    if credibility_hits == 1:
+        credibility += 10
+    elif credibility_hits >= 2:
+        credibility += 20
+        
+    if persona == "authoritative":
+        credibility += 5    
+        
+    credibility = max(0, min(100, credibility))
+    
+    # 4. Market Effectiveness
+    # weighted average
+    market_effectiveness = int((clarity * 0.35) + (emotion * 0.25) + (credibility * 0.30) + ( 0.10 * 80 )) # base effectiveness
+    market_effectiveness = max(0, min(100, market_effectiveness))
     score = market_effectiveness
-
+    
+    # 5. Suggestions and insights
     suggestion = f"Improved version: {text} (with enhanced clarity and impact)"
-    insights = [
-        "Add specific metrics to increase credibility",
-        "Include a clear call-to-action",
-        "Use more emotional language to connect with audience",
-    ]
-
+    insights: List[str] = []
+    
+    if clarity < 60:
+        insights.append("Your message is quuite short. Consider adding more details to improve clarity.")
+    elif clarity > 300:
+        insights.append("Your message is quite long. Consider shortening it to improve clarity.")
+    
+    if emotional_hits == 0:
+        insights.append("Incorporate more emotional language to better connect with your audience.")
+    elif emotional_hits < 2:
+        insights.append("Consider adding more positive and emotional words to enhance engagement.") 
+        
+    if not has_numbers:
+        insights.append("Adding specific metrics or data can boost your message's credibility.")    
+    if credibility_hits == 0:
+        insights.append("Including references to research or evidence can enhance credibility.")    
+        
+    insights.append("Consider adding a clear call-to-action to guide your audience.")
+    
+    # fallback if no insights
+    if not insights:
+        insights = ["Your message is well-balanced! Consider minor tweaks to further enhance its impact."]
+        
     return AnalyzeResponse(
         score=score,
-        clarity=clarity,
-        emotion=emotion,
-        credibility=credibility,
-        market_effectiveness=market_effectiveness,
+        clarity=int(clarity),
+        emotion=int(emotion),
+        credibility=int(credibility),
+        market_effectiveness=int(market_effectiveness),
         suggestion=suggestion,
         insights=insights,
     )
