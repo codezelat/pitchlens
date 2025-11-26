@@ -9,21 +9,58 @@ export default function AppPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const [tone, setTone] = useState(50);
-  const [selectedPersona, setSelectedPersona] = useState("professional");
+  const [selectedPersona, setSelectedPersona] = useState("expert");
 
-  const handleAnalyze = () => {
-    setAnalyzing(true);
-    setTimeout(() => {
+  const handleAnalyze = async () => {
+  if (!inputText.trim()) {
+    alert("Message cannot be empty");
+    return;
+  }
+
+  setAnalyzing(true);
+  setAnalyzed(false);
+
+  try {
+    const res = await fetch("http://127.0.0.1:8000/analyze", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        message: inputText,
+        tone: selectedPersona === "friendly" ? "casual" : "professional",
+        persona: selectedPersona,
+      }),
+    });
+
+    if (!res.ok) {
+      const err = await res.json();
+      alert(err.detail?.[0]?.msg || "Analysis failed");
       setAnalyzing(false);
-      setAnalyzed(true);
-    }, 2000);
-  };
+      return;
+    }
+
+    const data = await res.json();
+    console.log("Analysis result:", data);
+
+    // Later we will show real results - for now:
+    setAnalyzed(true);
+
+  } catch (error) {
+    console.error("Network error:", error);
+    alert("Network error: Could not reach backend");
+  }
+
+  setAnalyzing(false);
+};
+
 
   const personas = [
-    { id: "professional", name: "Professional", emoji: "👔" },
+    { id: "expert", name: "Professional", emoji: "👔" },
     { id: "friendly", name: "Friendly", emoji: "😊" },
     { id: "technical", name: "Technical", emoji: "💻" },
     { id: "casual", name: "Casual", emoji: "👋" },
+    { id: "authoritative", name: "Authoritative", emoji: "💼" },
   ];
 
   return (
@@ -200,6 +237,7 @@ export default function AppPage() {
                     max="100"
                     value={tone}
                     onChange={(e) => setTone(Number(e.target.value))}
+                     aria-label="Tone slider"
                     className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-[#4B3CDB]"
                   />
                   <div className="text-center">
