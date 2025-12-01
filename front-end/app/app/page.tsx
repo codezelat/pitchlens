@@ -227,6 +227,58 @@ export default function AppPage() {
               </div>
             </div>
 
+            {/* Score Dashboard */}
+            {result && (
+              <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900 mb-6">Message Quality Scores</h2> 
+                <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Overall Score */}
+                   <div className="p-4 rounded-xl bg-gradient-to-br from-blue-50 to-purple-50 border border-[#4B3CDB]">
+                    <p className="text-sm font-medium text-gray-700 mb-1">
+                      Overall Score
+                      </p>
+                    <p className="text-3xl font-bold text-gray-900">{result.score}</p>
+                  </div>
+
+                  {/* Clarity */}
+                  <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+                    <p className="text-sm font-medium text-gray-700 mb-1">Clarity</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {result.clarity}
+                    </p>
+                  </div>
+
+                  {/* Emotion */}
+                  <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+                    <p className="text-sm font-medium text-gray-700 mb-1">Emotion</p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {result.emotion}
+                    </p>
+                  </div>
+
+                  {/* Credibility */}
+                  <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+                    <p className="text-sm font-medium text-gray-700 mb-1">
+                      Credibility
+                    </p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {result.credibility}
+                    </p>
+                  </div>
+
+                  {/* Market Effectiveness */}
+                  <div className="p-4 rounded-xl bg-gray-50 border border-gray-200">
+                    <p className="text-sm font-medium text-gray-700 mb-1">
+                      Market Effectiveness
+                    </p>
+                    <p className="text-2xl font-semibold text-gray-900">
+                      {result.market_effectiveness}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+            
             {/* Tone Adjuster & Persona Picker */}
             <div className="grid lg:grid-cols-2 gap-6">
               {/* Tone Adjuster */}
