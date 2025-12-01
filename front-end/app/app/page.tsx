@@ -3,6 +3,16 @@
 import { useState } from "react";
 import Link from "next/link";
 
+type AnalysisResult = {
+  score: number;
+  clarity: number;
+  emotion: number;
+  credibility: number;
+  market_effectiveness: number;
+  suggestion: string;
+  insights: string[];
+};
+
 export default function AppPage() {
   const [inputText, setInputText] = useState("");
   const [inputUrl, setInputUrl] = useState("");
@@ -10,6 +20,7 @@ export default function AppPage() {
   const [analyzed, setAnalyzed] = useState(false);
   const [tone, setTone] = useState(50);
   const [selectedPersona, setSelectedPersona] = useState("expert");
+  const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const handleAnalyze = async () => {
   if (!inputText.trim()) {
@@ -43,7 +54,7 @@ export default function AppPage() {
     const data = await res.json();
     console.log("Analysis result:", data);
 
-    // Later we will show real results - for now:
+    setResult(data); // Store the result for later use
     setAnalyzed(true);
 
   } catch (error) {
@@ -210,10 +221,7 @@ export default function AppPage() {
                     </span>
                   </div>
                   <p className="text-gray-700 leading-relaxed">
-                    Transform your messaging with AI-powered insights. Our
-                    advanced engine analyzes tone, clarity, and emotional impact
-                    to help you craft compelling content that resonates with
-                    your target audience and drives meaningful engagement.
+                    {result?.suggestion || "Your optimized message will appear here..."}
                   </p>
                 </div>
               </div>
