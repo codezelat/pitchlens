@@ -39,7 +39,7 @@ export default function AppPage() {
       },
       body: JSON.stringify({
         message: inputText,
-        tone: selectedPersona === "friendly" ? "casual" : "professional",
+        tone: selectedPersona === "friendly" || selectedPersona === "casual" ? "casual" : "professional",
         persona: selectedPersona,
       }),
     });
