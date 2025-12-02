@@ -278,7 +278,21 @@ export default function AppPage() {
                 </div>
               </div>
             )}
-            
+
+            {/* Insights & Suggestions */}
+            {result && result.insights && result.insights.length > 0 && (
+              <div className="bg-white rounded-2xl p-8 shadow-sm border border-gray-200">
+                <h2 className="text-2xl font-bold text-gray-900 mb-4">
+                  Key Insights
+                </h2>
+                <ul className="list-disc pl-5 space-y-2 text-gray-700">
+                  {result.insights.map((item, idx) => (
+                    <li key={idx}>{item}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Tone Adjuster & Persona Picker */}
             <div className="grid lg:grid-cols-2 gap-6">
               {/* Tone Adjuster */}
