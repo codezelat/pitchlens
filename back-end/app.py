@@ -65,7 +65,7 @@ def run_simple_analysis(message: str, tone: str, persona: str) -> AnalyzeRespons
     clarity = max(0, min(100, clarity))
     
     # 2. Emotion
-    positive_words = ["exciting", "amazing", "love", "delighted" "great", "success", "powerful", "win", "thrilled", "fantastic", "wonderful"]
+    positive_words = ["exciting", "amazing", "love", "delighted","great", "success", "powerful", "win", "thrilled", "fantastic", "wonderful"]
     emotional_hits = sum(1 for word in positive_words if word in lower_text)
     
     if emotional_hits == 0:
@@ -116,8 +116,8 @@ def run_simple_analysis(message: str, tone: str, persona: str) -> AnalyzeRespons
     insights: List[str] = []
     
     if clarity < 60:
-        insights.append("Your message is quuite short. Consider adding more details to improve clarity.")
-    elif clarity > 300:
+        insights.append("Your message is quite short. Consider adding more details to improve clarity.")
+    elif length > 300:
         insights.append("Your message is quite long. Consider shortening it to improve clarity.")
     
     if emotional_hits == 0:
