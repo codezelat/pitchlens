@@ -1,7 +1,13 @@
+import logging
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
 from typing import List, Literal
 from fastapi.middleware.cors import CORSMiddleware
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+
+logger = logging.getLogger("pitchlens_backend")
 
 
 app = FastAPI(
@@ -148,22 +154,32 @@ def run_simple_analysis(message: str, tone: str, persona: str) -> AnalyzeRespons
 
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_message(request: AnalyzeRequest):
+    # Log the incoming request
+    logger.info(f"Received analysis request: tone={request.tone}, persona={request.persona}, message_length={len(request.message or " ")}")
     # Custom Validation
     # 1.Empty check
     if not request.message or request.message.strip() == "":
+        logger.warning("Validation failed: Empty or whitespace-only message received")
         raise HTTPException(status_code=400, detail="Message cannot be empty or whitespace.")
     text = request.message.strip()
     
     # 2.Length checks
     if len(text) < 10:
+        logger.warning("Validation failed: Message too short", extra={"length": len(text)})
         raise HTTPException(status_code=400, detail="Message must be at least 10 characters long.")
     
     if len(text) > 2000:
+        logger.warning("Validation failed: Message too long", extra={"length": len(text)})
         raise HTTPException( status_code=400, detail="Message is too long. Please keep it under 2000 characters.")  
     
     # 3. Run mock analysis
-    return run_simple_analysis(text, request.tone, request.persona)
-    
+    result = run_simple_analysis(text, request.tone, request.persona)
+
+    logger.info("Analysis completed | Score: %d, clarity= %d, emotion= %d, credibility= %d, market_effectiveness= %d",
+                result.score, result.clarity, result.emotion, result.credibility, result.market_effectiveness)
+                
+    return result
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "version": "1.0.0"}
