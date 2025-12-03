@@ -2,9 +2,10 @@ import os
 import sys
 import pytest
 
-# 👇 Make sure Python can find app.py (backend root)
+# ✅ Ensure Python can find app.py
 CURRENT_DIR = os.path.dirname(__file__)
 BACKEND_ROOT = os.path.dirname(CURRENT_DIR)
+
 if BACKEND_ROOT not in sys.path:
     sys.path.insert(0, BACKEND_ROOT)
 
