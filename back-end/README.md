@@ -74,6 +74,13 @@ Analyzes a message and returns scoring and suggestions.
   ]
 }
 ```
+## Running Tests
+
+Make sure you are inside the back-end folder and your virtual environment is activated.
+
+```bash
+cd back-end
+pytest
 
 ### GET /health
 Health check endpoint.
