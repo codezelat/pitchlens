@@ -82,6 +82,23 @@ Make sure you are inside the back-end folder and your virtual environment is act
 cd back-end
 pytest
 
+## Unit Testing
+
+PitchLens uses PyTest for backend testing.
+
+To run tests:
+
+1. Activate virtual environment
+2. Navigate to back-end folder
+3. Run:
+   pytest
+
+Current tests cover:
+- Short message scoring
+- Credibility boost from numbers & data
+- Emotional tone impact
+
+
 ### GET /health
 Health check endpoint.
 
