@@ -12,12 +12,7 @@ from dotenv import load_dotenv
 from google import genai
 
 load_dotenv()
-
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if not GOOGLE_API_KEY:
-    raise RuntimeError("Missing GOOGLE_API_KEY in environment")
-
-client = genai.Client(api_key=GOOGLE_API_KEY)
+client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
 
 GEMINI_SYSTEM_PROMPT = """
 You are an API that MUST return valid JSON only.
@@ -107,7 +102,7 @@ Message:
 """
 
     response = client.models.generate_content(
-        model="gemini-1.5-flash",
+        model="models/gemini-2.5-flash",
         contents=prompt
     )
 
