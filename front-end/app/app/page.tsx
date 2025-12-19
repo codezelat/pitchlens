@@ -13,6 +13,13 @@ type AnalysisResult = {
   insights: string[];
 };
 
+type AnalysisPayload = {
+  tone: "casual" | "professional";
+  persona: string;
+  message?: string;
+  url?: string;
+};
+
 export default function AppPage() {
   const [inputText, setInputText] = useState("");
   const [inputUrl, setInputUrl] = useState("");
@@ -23,13 +30,21 @@ export default function AppPage() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const handleAnalyze = async () => {
-  if (!inputText.trim()) {
-    alert("Message cannot be empty");
+  if (!inputText.trim() && !inputUrl.trim()) {
+    alert("Please enter text or a URL to analyze.");
     return;
   }
 
   setAnalyzing(true);
   setAnalyzed(false);
+
+  const payload: AnalysisPayload = {
+    tone: selectedPersona === "friendly" || selectedPersona === "casual" ? "casual" : "professional",
+    persona: selectedPersona,
+  };
+
+  if (inputText.trim()) payload.message = inputText.trim();
+  if (inputUrl.trim()) payload.url = inputUrl.trim();
 
   try {
     const res = await fetch("http://127.0.0.1:8000/analyze", {
@@ -37,11 +52,8 @@ export default function AppPage() {
       headers: {
         "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        message: inputText,
-        tone: selectedPersona === "friendly" || selectedPersona === "casual" ? "casual" : "professional",
-        persona: selectedPersona,
-      }),
+      body: JSON.stringify(payload),
+   
     });
 
     if (!res.ok) {

@@ -2,10 +2,12 @@ import logging
 import os
 import re
 import json
+import httpx    
 
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel
-from typing import List, Literal
+from typing import List, Literal, Optional
+from urllib.parse import urlparse   
 from fastapi.middleware.cors import CORSMiddleware
 
 from dotenv import load_dotenv
@@ -34,11 +36,12 @@ Rules:
 - suggestion must be a rewritten/optimized version of the user's message (not just feedback).
 """
 
+# Configure logging
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 
 logger = logging.getLogger("pitchlens_backend")
 
-
+# Initialize FastAPI app
 app = FastAPI(
     title="PitchLens Analysis API",
     version="1.0.0",
@@ -57,9 +60,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Pydantic models for request and response
 class AnalyzeRequest(BaseModel):
     # No min_length / max_length here → we control validation ourselves
-    message: str 
+    message: Optional[str] = None
+    url: Optional[str] = None
     tone: Literal["professional", "casual", "enthusiastic"] = "professional"
     persona: Literal["expert", "friendly", "authoritative"] = "expert"
 
@@ -71,6 +76,46 @@ class AnalyzeResponse(BaseModel):
     market_effectiveness: int
     suggestion: str
     insights: List[str]
+    
+# Url content fetching utility
+
+MAX_FETCH_BYTES = 600_000  
+FETCH_TIMEOUT = 10.0
+
+def _basic_html_to_text(html: str) -> str:
+    html =re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
+    html =re.sub(r"(?is)<style.*?>.*?</style>", " ", html)
+    text = re.sub(r"(?is)<.*?>", " ", html)
+    return re.sub(r"\s+", " ", text).strip()
+
+def fetch_text_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Invalid URL scheme. Only http and https are allowed.")    
+    
+    if parsed.hostname in ("localhost", "127.0.0.1" , "0.0.0.0"):
+        raise ValueError("Fetching from localhost is not allowed.")
+    
+    logger.info("Fetching content from URL: %s", url)
+    
+    with httpx.Client(timeout=FETCH_TIMEOUT, follow_redirects=True) as http_client:
+        r = http_client.get(url, headers={"User-Agent": "PitchLensBot/1.0"})
+        r.raise_for_status()
+        
+        content_type = r.headers.get("Content-Type", "").lower()
+        raw = r.content[:MAX_FETCH_BYTES]
+        text = raw.decode(r.encoding or "utf-8", errors="replace")
+        
+        if "text/html" in content_type:
+            extracted = _basic_html_to_text(text)
+            
+        else:
+            extracted = re.sub(r"\s+", " ", text).strip()
+            
+    if len(extracted) < 50:
+        raise ValueError("Fetched content is too short to analyze.")
+    
+    return extracted
     
 def _extract_json(text: str) -> dict:
     """
@@ -106,26 +151,17 @@ Message:
         contents=prompt
     )
 
-    raw_text = response.text
-    logger.info("Raw Gemini response received")
-
-    if not raw_text:
-        logger.error("Empty response from Gemini")
-        raise ValueError("Empty response from Gemini")
-    try:
-        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
-        if not match:
-            raise ValueError("No valid JSON object found in Gemini output")
-        json_str = match.group()
-        data = json.loads(json_str)
-        
-    except Exception as e:
-        logger.error("Failed to parse Gemini JSON: %s", raw_text)
-        raise ValueError("Invalid Gemini JSON response") from e
+    raw_text = response.text or ""
     
+    logger.info("Raw Gemini response received")
+    
+    match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+    if not match:
+        raise ValueError("No valid JSON object found in Gemini output")
+    
+    data = json.loads(match.group())
     return AnalyzeResponse(**data)
-
-
+   
 def run_simple_analysis(message: str, tone: str, persona: str) -> AnalyzeResponse:
     """
     improved mock analysis logic for demonstration purposes.
@@ -238,13 +274,24 @@ def run_simple_analysis(message: str, tone: str, persona: str) -> AnalyzeRespons
 @app.post("/analyze", response_model=AnalyzeResponse)
 async def analyze_message(request: AnalyzeRequest):
     # Log the incoming request
-    logger.info(f"Received analysis request: tone={request.tone}, persona={request.persona}, message_length={len(request.message or " ")}")
+    logger.info("Analyze request received | tone=%s persona=%s has_message=%s has_url=%s",
+                request.tone, request.persona,bool(request.message), bool(request.url))
+    
     # Custom Validation
     # 1.Empty check
-    if not request.message or request.message.strip() == "":
-        logger.warning("Validation failed: Empty or whitespace-only message received")
-        raise HTTPException(status_code=400, detail="Message cannot be empty or whitespace.")
-    text = request.message.strip()
+    
+    message = (request.message or "").strip()
+    url = (request.url or "").strip()
+    
+    if message:
+        text = message
+    elif url:
+        try:
+            text = fetch_text_from_url(url)
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Failed to fetch content from URL: {str(e)}")
+    else:
+        raise HTTPException(status_code=400, detail="Either message or url must be provided.")
     
     # 2.Length checks
     if len(text) < 10:
