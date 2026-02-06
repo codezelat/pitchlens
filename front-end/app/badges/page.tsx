@@ -1,19 +1,91 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AnalysisRecord } from "@/lib/analysis";
+import { fetchLatestAnalysis } from "@/lib/api";
+import { getLastAnalysis } from "@/lib/storage";
 
 export default function BadgesPage() {
   const [selectedFormat, setSelectedFormat] = useState<"png" | "svg">("png");
   const [copied, setCopied] = useState(false);
+  const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
 
-  const marketResonanceScore = 87;
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      const latest = await fetchLatestAnalysis();
+      if (!isMounted) return;
+      setAnalysis(latest || getLastAnalysis());
+    };
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const marketResonanceScore = analysis?.score ?? 0;
 
   const embedCode = `<div style="display: inline-block; padding: 20px; background: linear-gradient(135deg, #4B3CDB, #6C5CE7); border-radius: 16px; color: white; font-family: system-ui, -apple-system, sans-serif; text-align: center; box-shadow: 0 10px 25px rgba(75, 60, 219, 0.3);">
   <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">Market Resonance Score</div>
   <div style="font-size: 48px; font-weight: bold; margin-bottom: 4px;">${marketResonanceScore}</div>
   <div style="font-size: 12px; opacity: 0.8;">Verified by PitchLens</div>
 </div>`;
+
+  const badgeWidth = 360;
+  const badgeHeight = 200;
+
+  const getBadgeSvg = (score: number) => {
+    return `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${badgeWidth}" height="${badgeHeight}" viewBox="0 0 ${badgeWidth} ${badgeHeight}" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#4B3CDB"/>
+      <stop offset="100%" stop-color="#6C5CE7"/>
+    </linearGradient>
+  </defs>
+  <rect width="${badgeWidth}" height="${badgeHeight}" rx="24" fill="url(#grad)"/>
+  <text x="50%" y="52" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" opacity="0.9">Market Resonance Score</text>
+  <text x="50%" y="118" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="64" font-weight="700" text-anchor="middle">${score}</text>
+  <text x="50%" y="160" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" opacity="0.85">Verified by PitchLens</text>
+</svg>`;
+  };
+
+  const downloadSvg = (svg: string) => {
+    const blob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "pitchlens-badge.svg";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const downloadPng = (svg: string) => {
+    const image = new Image();
+    const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
+    const url = URL.createObjectURL(svgBlob);
+    image.onload = () => {
+      const canvas = document.createElement("canvas");
+      canvas.width = badgeWidth;
+      canvas.height = badgeHeight;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) {
+        URL.revokeObjectURL(url);
+        return;
+      }
+      ctx.drawImage(image, 0, 0, badgeWidth, badgeHeight);
+      canvas.toBlob((blob) => {
+        if (!blob) return;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "pitchlens-badge.png";
+        link.click();
+      }, "image/png");
+      URL.revokeObjectURL(url);
+    };
+    image.src = url;
+  };
 
   const handleCopyEmbed = () => {
     navigator.clipboard.writeText(embedCode);
@@ -22,10 +94,12 @@ export default function BadgesPage() {
   };
 
   const handleDownload = (format: "png" | "svg") => {
-    // Placeholder for download functionality
-    alert(
-      `Download ${format.toUpperCase()} functionality would be implemented here`
-    );
+    const svg = getBadgeSvg(marketResonanceScore);
+    if (format === "svg") {
+      downloadSvg(svg);
+      return;
+    }
+    downloadPng(svg);
   };
 
   return (
@@ -71,6 +145,21 @@ export default function BadgesPage() {
           </p>
         </div>
 
+        {!analysis && (
+          <div className="mb-10 rounded-2xl border border-gray-200 bg-white p-6 text-center">
+            <p className="text-gray-700 mb-4">
+              No analysis found yet. Run an analysis first to generate a real badge.
+            </p>
+            <Link
+              href="/app"
+              className="inline-block px-6 py-3 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-full font-semibold hover:shadow-xl transition-all hover:scale-105"
+            >
+              Analyze a Message
+            </Link>
+          </div>
+        )}
+
+        {analysis && (
         <div className="grid lg:grid-cols-2 gap-8 max-w-6xl mx-auto">
           {/* Badge Preview */}
           <div className="space-y-6">
@@ -128,7 +217,8 @@ export default function BadgesPage() {
               {/* Download Button */}
               <button
                 onClick={() => handleDownload(selectedFormat)}
-                className="w-full px-6 py-4 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-xl font-semibold hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center gap-2"
+                disabled={!analysis}
+                className="w-full px-6 py-4 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-xl font-semibold hover:shadow-xl transition-all hover:scale-105 flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
               >
                 <svg
                   className="w-5 h-5"
@@ -349,8 +439,9 @@ export default function BadgesPage() {
             </div>
           </div>
         </div>
+        )}
 
-        {/* Action Buttons */}
+        {analysis && (
         <div className="flex flex-col sm:flex-row justify-center gap-4 mt-12">
           <Link
             href="/dashboard"
@@ -365,6 +456,7 @@ export default function BadgesPage() {
             Analyze New Message
           </Link>
         </div>
+        )}
       </div>
     </div>
   );

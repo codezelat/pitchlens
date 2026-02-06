@@ -6,6 +6,8 @@
   --primary: #4b3cdb;
   --primary-dark: #1c1a4a;
   --accent: #6c5ce7;
+  --font-geist-sans: "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-geist-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 @theme inline {

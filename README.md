@@ -1,122 +1,128 @@
-# PitchLens — Message Intelligence Engine
+# PitchLens
 
-PitchLens is a modern, conversion-focused messaging tool that helps teams craft messages that resonate with their audience. This repository contains the front-end UI, built with Next.js and Tailwind CSS. It demonstrates a complete message analysis and improvement workflow with a focus on clarity, design, and conversion.
+PitchLens is a full-stack message intelligence product:
+- `front-end`: Next.js 16 web app for analysis, dashboard, and badge generation.
+- `back-end`: FastAPI service for text/URL analysis, persistence, and history APIs.
 
----
+The current implementation supports:
+- Real analysis requests from UI to API.
+- Persisted analysis records.
+- Dashboard and badges driven by persisted data.
+- SVG/PNG badge download.
+- Optional JWT auth enforcement on API.
+- Alembic migrations for production database management.
 
-## Key Features
+## Repository Layout
 
-- Analyze messages for clarity, emotional resonance, credibility, and market effectiveness.
-- Provide AI-powered rewrite suggestions with tone and persona adjustments.
-- Visual scoring dashboard and actionable recommendations.
-- Badge generation for publishing verified scores on external websites.
+```text
+pitchlens/
+  front-end/    # Next.js app
+  back-end/     # FastAPI app
+```
 
----
+## Prerequisites
 
-## Pages & Workflow
+- Node.js 18+
+- npm 9+
+- Python 3.10+
+- pip
 
-- `/` — Landing page with feature highlights and CTAs.
-- `/app` — Core app interface where users can paste text or provide a URL and run an analysis.
-- `/dashboard` — Score breakdown and recommendations for improvement.
-- `/badges` — Badge customization, downloads, and embed code.
+## Local Setup
 
----
+### 1) Backend
 
-## Development & Installation
+```bash
+cd back-end
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-dev.txt
+cp .env.example .env
+uvicorn app:app --reload --port 8000
+```
 
-Prerequisites
+### 2) Frontend
 
-- Node.js (v18+)
-- npm (or yarn / pnpm)
+In a second terminal:
 
-Commands (from project root)
-
-```powershell
-# install dependencies
+```bash
+cd front-end
 npm install
-
-# start the development server
+cp .env.example .env.local
 npm run dev
+```
 
-# build for production
-npm run build
+Open `http://localhost:3000`.
 
-# start production server
-npm run start
-# lint the project
+## Environment Variables
+
+### Backend (`back-end/.env`)
+
+- `GOOGLE_API_KEY`: Optional. If set, Gemini analysis is used before fallback analysis.
+- `GENAI_MODEL`: Optional. Defaults to `models/gemini-2.5-flash`.
+- `DATABASE_URL`: Optional. Defaults to `sqlite:///./pitchlens.db`.
+- `ALLOWED_ORIGINS`: Comma-separated CORS origins.
+- `REQUIRE_AUTH`: `true|false`. If `true`, bearer auth is required.
+- `CLERK_ISSUER`: JWT issuer URL for Clerk-style JWKS validation.
+- `CLERK_JWKS_URL`: Optional explicit JWKS endpoint.
+- `CLERK_AUDIENCE`: Optional JWT audience.
+- `JWKS_CACHE_TTL`: JWKS cache TTL in seconds.
+- `AUTO_CREATE_DB`: `true|false`. Local convenience table creation.
+- `RATE_LIMIT_PER_MINUTE`: Per user/IP rate limit for `/analyze`.
+
+### Frontend (`front-end/.env.local`)
+
+- `NEXT_PUBLIC_API_BASE`: API base URL. Default `http://127.0.0.1:8000`.
+
+## Build Commands
+
+### Frontend
+
+```bash
+cd front-end
 npm run lint
+npm run build
+npm run start
 ```
 
-Open `http://localhost:3000` in your browser to preview the application.
+### Backend
 
----
-
-## How to Use the App (User Workflow)
-
-1. Open the App: Navigate to `/app` in the browser.
-2. Paste your text or enter a URL: Provide content for analysis.
-3. Click **Analyze Message**: This runs the UI demo analysis.
-4. Compare Before / After: View the original message and recommended rewrite.
-5. Adjust Tone and Persona: Tweak tone using the slider and pick a persona to see different suggestions.
-6. Apply Rewrite: Accept suggestions and view the updated message on the Dashboard.
-7. Create Badge: Visit `/badges` to generate, preview, and copy the embed code or download an image.
-
-> Note: The current front-end includes mock data and UI-only behavior. Integrate an AI backend (API) to replace the demo logic with real analysis.
-
----
-
-## Project Structure
-
-```
-front-end/
-├─ app/ (Next.js app routes: landing, app, dashboard, badges)
-├─ components/ (reusable UI components like Navbar, Card, Button, ScoreCircle)
-├─ public/ (assets)
-├─ app/globals.css (global styles and brand palette)
-├─ package.json
+```bash
+cd back-end
+python -m pytest
 ```
 
----
+## API Surface
 
-## Extending & Integrating a Backend
+- `POST /analyze`: Analyze input text or URL, persist record, return normalized scores + rewrite + insights.
+- `GET /analyses/latest`: Latest stored analysis.
+- `GET /analyses/{analysis_id}`: Analysis by id.
+- `GET /analyses?limit=20`: Recent analyses list.
+- `GET /health`: Service health.
 
-1. Add a server/API endpoint (e.g. `/api/analyze`) that accepts message text and returns analysis JSON.
-2. Update UI calls to use fetch/XHR to connect to the API endpoint and replace mocked results.
-3. Optionally, add authentication and data storage for saved messages.
+Detailed API docs: `back-end/README.md`.
 
-Example API output format:
+## Database Migrations
 
-```json
-{
-  "score": 84,
-  "clarity": 92,
-  "emotion": 80,
-  "credibility": 78,
-  "suggestion": "Rewritten message text",
-  "insights": ["Add case study", "Include CTA"]
-}
+For production/staging:
+
+```bash
+cd back-end
+export AUTO_CREATE_DB=false
+alembic upgrade head
 ```
 
----
+## Production Readiness Checklist (Code + Runtime)
 
-## Design & Conventions
+1. Use Postgres via `DATABASE_URL`.
+2. Set strict `ALLOWED_ORIGINS`.
+3. Set `REQUIRE_AUTH=true` and configure issuer/JWKS/audience.
+4. Keep `AUTO_CREATE_DB=false` and run Alembic migrations.
+5. Set `RATE_LIMIT_PER_MINUTE`.
+6. Ensure frontend `NEXT_PUBLIC_API_BASE` points to production API.
+7. Run frontend build + backend tests in CI before release.
 
-- Minimal, Google-like styling using Tailwind utilities
-- Large whitespace, rounded cards, soft gradients
-- Smooth micro-animations and transitions
-- Accessible contrast and typographic scale
+## Notes
 
----
-
-## Contributing
-
-Contributions are welcome! When submitting contributions:
-
-1. Fork the repo and create a feature branch.
-2. Follow Tailwind styles and design conventions.
-3. Add tests where relevant and update the README where needed.
-
----
-
-## License & Credits
-
+- URL analysis has SSRF protections (private/loopback block + redirect checks).
+- If Gemini is unavailable or errors, the backend automatically falls back to deterministic analysis logic.

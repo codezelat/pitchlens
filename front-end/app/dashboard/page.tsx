@@ -1,13 +1,39 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
+import { AnalysisRecord } from "@/lib/analysis";
+import { fetchAnalyses, fetchLatestAnalysis } from "@/lib/api";
+import { getLastAnalysis } from "@/lib/storage";
 
 export default function DashboardPage() {
-  // Mock data for demonstration
-  const marketResonanceScore = 87;
-  const clarityScore = 92;
-  const emotionScore = 78;
-  const credibilityScore = 85;
+  const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
+  const [recent, setRecent] = useState<AnalysisRecord[]>([]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const load = async () => {
+      const list = await fetchAnalyses(8);
+      if (!isMounted) return;
+      if (list.length > 0) {
+        setRecent(list);
+        setAnalysis(list[0]);
+        return;
+      }
+      const latest = await fetchLatestAnalysis();
+      if (!isMounted) return;
+      setAnalysis(latest || getLastAnalysis());
+    };
+    load();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const marketResonanceScore = analysis?.score ?? 0;
+  const clarityScore = analysis?.clarity ?? 0;
+  const emotionScore = analysis?.emotion ?? 0;
+  const credibilityScore = analysis?.credibility ?? 0;
 
   const getScoreColor = (score: number) => {
     if (score >= 80) return "text-green-600";
@@ -64,6 +90,60 @@ export default function DashboardPage() {
           </p>
         </div>
 
+        {!analysis && (
+          <div className="mb-10 rounded-2xl border border-gray-200 bg-white p-6 text-center">
+            <p className="text-gray-700 mb-4">
+              No analysis found yet. Run your first analysis to see real scores and insights.
+            </p>
+            <Link
+              href="/app"
+              className="inline-block px-6 py-3 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-full font-semibold hover:shadow-xl transition-all hover:scale-105"
+            >
+              Analyze a Message
+            </Link>
+          </div>
+        )}
+
+        {analysis && (
+          <div className="mb-8 rounded-2xl border border-gray-200 bg-white p-6">
+            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-900 mb-1">
+                  Latest Analysis
+                </h2>
+                <p className="text-sm text-gray-600">
+                  Tone: {analysis.tone} · Persona: {analysis.persona}
+                </p>
+              </div>
+              <div className="text-sm text-gray-500">
+                {new Date(analysis.createdAt).toLocaleString()}
+              </div>
+            </div>
+            <div className="mt-4 grid gap-4 lg:grid-cols-2">
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">
+                  Input
+                </p>
+                <p className="text-sm text-gray-700">
+                  {analysis.input.message ||
+                    analysis.input.url ||
+                    "No input recorded."}
+                </p>
+              </div>
+              <div className="rounded-xl border border-gray-200 bg-gray-50 p-4">
+                <p className="text-xs uppercase tracking-wide text-gray-500 mb-2">
+                  Suggested Rewrite
+                </p>
+                <p className="text-sm text-gray-700">
+                  {analysis.suggestion}
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {analysis && (
+        <>
         {/* Market Resonance Score - Hero Card */}
         <div className="mb-8 bg-gradient-to-br from-[#4B3CDB] to-[#6C5CE7] rounded-3xl p-8 lg:p-12 text-white shadow-2xl">
           <div className="flex flex-col lg:flex-row items-center justify-between gap-8">
@@ -228,86 +308,33 @@ export default function DashboardPage() {
               Key Insights
             </h3>
             <div className="space-y-4">
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
-                  <svg
-                    className="w-5 h-5 text-green-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
-                  </svg>
+              {(analysis?.insights?.length ? analysis.insights : [
+                "Run an analysis to see tailored insights.",
+              ]).map((insight, idx) => (
+                <div key={idx} className="flex gap-4">
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-green-100 flex items-center justify-center">
+                    <svg
+                      className="w-5 h-5 text-green-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-gray-900 mb-1">
+                      Insight {idx + 1}
+                    </h4>
+                    <p className="text-sm text-gray-600">{insight}</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    Strong Clarity
-                  </h4>
-                  <p className="text-sm text-gray-600">
-                    Your message is clear and easy to understand. Keep this
-                    consistency.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-yellow-100 flex items-center justify-center">
-                  <svg
-                    className="w-5 h-5 text-yellow-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    Emotional Resonance Opportunity
-                  </h4>
-                  <p className="text-sm text-gray-600">
-                    Consider adding more compelling emotional triggers to
-                    increase engagement.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex gap-4">
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-100 flex items-center justify-center">
-                  <svg
-                    className="w-5 h-5 text-blue-600"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"
-                    />
-                  </svg>
-                </div>
-                <div>
-                  <h4 className="font-semibold text-gray-900 mb-1">
-                    Good Credibility
-                  </h4>
-                  <p className="text-sm text-gray-600">
-                    Your message establishes trust. Adding data points could
-                    enhance it further.
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
 
@@ -317,46 +344,49 @@ export default function DashboardPage() {
               Recommendations
             </h3>
             <div className="space-y-4">
-              <div className="bg-white rounded-xl p-4 border border-gray-200">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#4B3CDB] text-white flex items-center justify-center text-xs font-bold">
-                    1
+              {(analysis?.insights?.length ? analysis.insights : [
+                "Run an analysis to generate recommendations.",
+              ]).map((insight, idx) => (
+                <div key={idx} className="bg-white rounded-xl p-4 border border-gray-200">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#4B3CDB] text-white flex items-center justify-center text-xs font-bold">
+                      {idx + 1}
+                    </div>
+                    <p className="text-sm text-gray-700">{insight}</p>
                   </div>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Add social proof:</span>{" "}
-                    Include testimonials or metrics to boost credibility
-                  </p>
                 </div>
-              </div>
-
-              <div className="bg-white rounded-xl p-4 border border-gray-200">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#4B3CDB] text-white flex items-center justify-center text-xs font-bold">
-                    2
-                  </div>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">
-                      Strengthen emotional appeal:
-                    </span>{" "}
-                    Use power words and storytelling elements
-                  </p>
-                </div>
-              </div>
-
-              <div className="bg-white rounded-xl p-4 border border-gray-200">
-                <div className="flex items-start gap-3">
-                  <div className="flex-shrink-0 w-6 h-6 rounded-full bg-[#4B3CDB] text-white flex items-center justify-center text-xs font-bold">
-                    3
-                  </div>
-                  <p className="text-sm text-gray-700">
-                    <span className="font-semibold">Call-to-action:</span> Make
-                    your next steps crystal clear and compelling
-                  </p>
-                </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>
+
+        {recent.length > 1 && (
+          <div className="mb-10 rounded-2xl border border-gray-200 bg-white p-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Recent Analyses
+            </h3>
+            <div className="space-y-3">
+              {recent.slice(1).map((item) => (
+                <div
+                  key={item.id ?? item.createdAt}
+                  className="flex flex-col md:flex-row md:items-center md:justify-between gap-2 rounded-xl border border-gray-100 bg-gray-50 p-4"
+                >
+                  <div>
+                    <p className="text-sm text-gray-700">
+                      {item.input.message || item.input.url || "No input recorded."}
+                    </p>
+                    <p className="text-xs text-gray-500">
+                      Tone: {item.tone} · Persona: {item.persona}
+                    </p>
+                  </div>
+                  <div className="text-sm text-gray-600">
+                    Score {item.score} · {new Date(item.createdAt).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Action Buttons */}
         <div className="flex flex-col sm:flex-row justify-center gap-4">
@@ -373,6 +403,8 @@ export default function DashboardPage() {
             Analyze Another Message
           </Link>
         </div>
+        </>
+        )}
       </div>
     </div>
   );

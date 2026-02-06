@@ -2,19 +2,54 @@ import logging
 import os
 import re
 import json
+import time
+import ipaddress
+import socket
+import uuid
+from datetime import datetime
+from contextlib import asynccontextmanager
 import httpx    
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Depends, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel
-from typing import List, Literal, Optional
-from urllib.parse import urlparse   
+from typing import Dict, List, Literal, Optional
+from urllib.parse import urlparse, urljoin   
 from fastapi.middleware.cors import CORSMiddleware
 
 from dotenv import load_dotenv
-from google import genai
+
+try:
+    from google import genai
+except Exception:  # pragma: no cover - optional dependency
+    genai = None
+
+from sqlalchemy.orm import Session
+try:
+    from jose import jwt
+except Exception:  # pragma: no cover - optional dependency
+    jwt = None
+
+from db import get_db, init_db
+from models import Analysis
 
 load_dotenv()
-client = genai.Client(api_key=os.getenv("GOOGLE_API_KEY"))
+
+GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY", "").strip()
+GENAI_MODEL = os.getenv("GENAI_MODEL", "models/gemini-2.5-flash")
+REQUIRE_AUTH = os.getenv("REQUIRE_AUTH", "false").strip().lower() in ("1", "true", "yes")
+CLERK_ISSUER = os.getenv("CLERK_ISSUER", "").strip()
+CLERK_JWKS_URL = os.getenv("CLERK_JWKS_URL", "").strip()
+if not CLERK_JWKS_URL and CLERK_ISSUER:
+    CLERK_JWKS_URL = f"{CLERK_ISSUER}/.well-known/jwks.json"
+CLERK_AUDIENCE = os.getenv("CLERK_AUDIENCE", "").strip()
+JWKS_CACHE_TTL = int(os.getenv("JWKS_CACHE_TTL", "3600"))
+AUTO_CREATE_DB = os.getenv("AUTO_CREATE_DB", "true").strip().lower() in ("1", "true", "yes")
+RATE_LIMIT_PER_MINUTE = int(os.getenv("RATE_LIMIT_PER_MINUTE", "0"))
+
+client = None
+if genai and GOOGLE_API_KEY:
+    client = genai.Client(api_key=GOOGLE_API_KEY)
 
 GEMINI_SYSTEM_PROMPT = """
 You are an API that MUST return valid JSON only.
@@ -42,15 +77,46 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(
 logger = logging.getLogger("pitchlens_backend")
 
 # Initialize FastAPI app
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    if REQUIRE_AUTH and not jwt:
+        raise RuntimeError("REQUIRE_AUTH is enabled but python-jose is not installed.")
+    if REQUIRE_AUTH and (not CLERK_ISSUER or not CLERK_JWKS_URL):
+        raise RuntimeError("REQUIRE_AUTH is enabled but Clerk configuration is missing.")
+    if AUTO_CREATE_DB:
+        init_db()
+    yield
+
+
 app = FastAPI(
     title="PitchLens Analysis API",
     version="1.0.0",
-    description="Backend service for analyzing pitch messages."
+    description="Backend service for analyzing pitch messages.",
+    lifespan=lifespan,
 )
 
-origins = [
-    "http://localhost:3000",
-]
+
+@app.middleware("http")
+async def add_request_id(request: Request, call_next):
+    request_id = request.headers.get("X-Request-ID") or str(uuid.uuid4())
+    response = await call_next(request)
+    response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request_id=%s method=%s path=%s status=%s",
+        request_id,
+        request.method,
+        request.url.path,
+        response.status_code,
+    )
+    return response
+
+allowed_origins = os.getenv("ALLOWED_ORIGINS", "")
+origins = [origin.strip() for origin in allowed_origins.split(",") if origin.strip()]
+if not origins:
+    origins = [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ]
 
 app.add_middleware(
     CORSMiddleware,
@@ -59,6 +125,95 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+security = HTTPBearer(auto_error=False)
+_jwks_cache = {"keys": None, "fetched_at": 0.0}
+
+
+def _get_jwks() -> dict:
+    if not CLERK_JWKS_URL:
+        raise RuntimeError("CLERK_JWKS_URL not configured.")
+
+    now = time.time()
+    if _jwks_cache["keys"] and (now - _jwks_cache["fetched_at"] < JWKS_CACHE_TTL):
+        return _jwks_cache["keys"]
+
+    with httpx.Client(timeout=10.0) as http_client:
+        res = http_client.get(CLERK_JWKS_URL)
+        res.raise_for_status()
+        jwks = res.json()
+
+    _jwks_cache["keys"] = jwks
+    _jwks_cache["fetched_at"] = now
+    return jwks
+
+
+def _verify_token(token: str) -> str:
+    if not jwt:
+        raise RuntimeError("Auth verification dependency is unavailable.")
+    jwks = _get_jwks()
+    headers = jwt.get_unverified_header(token)
+    kid = headers.get("kid")
+    if not kid:
+        raise HTTPException(status_code=401, detail="Invalid token header.")
+
+    keys = jwks.get("keys", [])
+    key = next((k for k in keys if k.get("kid") == kid), None)
+    if not key:
+        _jwks_cache["keys"] = None
+        jwks = _get_jwks()
+        keys = jwks.get("keys", [])
+        key = next((k for k in keys if k.get("kid") == kid), None)
+        if not key:
+            raise HTTPException(status_code=401, detail="Unable to verify token.")
+
+    options = {
+        "verify_aud": bool(CLERK_AUDIENCE),
+        "verify_iss": bool(CLERK_ISSUER),
+    }
+    payload = jwt.decode(
+        token,
+        key,
+        algorithms=[headers.get("alg", "RS256")],
+        issuer=CLERK_ISSUER or None,
+        audience=CLERK_AUDIENCE or None,
+        options=options,
+    )
+    user_id = payload.get("sub")
+    if not user_id:
+        raise HTTPException(status_code=401, detail="Token missing subject.")
+    return user_id
+
+
+def get_current_user_id(
+    credentials: HTTPAuthorizationCredentials = Depends(security),
+) -> Optional[str]:
+    if credentials is None:
+        if REQUIRE_AUTH:
+            raise HTTPException(status_code=401, detail="Authentication required.")
+        return None
+    try:
+        return _verify_token(credentials.credentials)
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=401, detail="Invalid authentication token.")
+
+
+_rate_limit_cache: Dict[str, List[float]] = {}
+
+
+def _enforce_rate_limit(key: str) -> None:
+    if RATE_LIMIT_PER_MINUTE <= 0:
+        return
+    now = time.time()
+    window_start = now - 60
+    bucket = _rate_limit_cache.get(key, [])
+    bucket = [timestamp for timestamp in bucket if timestamp >= window_start]
+    if len(bucket) >= RATE_LIMIT_PER_MINUTE:
+        raise HTTPException(status_code=429, detail="Rate limit exceeded.")
+    bucket.append(now)
+    _rate_limit_cache[key] = bucket
 
 # Pydantic models for request and response
 class AnalyzeRequest(BaseModel):
@@ -76,11 +231,40 @@ class AnalyzeResponse(BaseModel):
     market_effectiveness: int
     suggestion: str
     insights: List[str]
+
+
+class AnalysisRecordResponse(AnalyzeResponse):
+    id: int
+    created_at: datetime
+    tone: str
+    persona: str
+    message: Optional[str] = None
+    url: Optional[str] = None
     
 # Url content fetching utility
 
 MAX_FETCH_BYTES = 600_000  
 FETCH_TIMEOUT = 10.0
+MAX_REDIRECTS = 3
+
+
+def _is_private_host(hostname: str) -> bool:
+    try:
+        infos = socket.getaddrinfo(hostname, None)
+    except socket.gaierror:
+        return True
+
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+        ):
+            return True
+    return False
 
 def _basic_html_to_text(html: str) -> str:
     html =re.sub(r"(?is)<script.*?>.*?</script>", " ", html)
@@ -89,33 +273,43 @@ def _basic_html_to_text(html: str) -> str:
     return re.sub(r"\s+", " ", text).strip()
 
 def fetch_text_from_url(url: str) -> str:
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise ValueError("Invalid URL scheme. Only http and https are allowed.")    
-    
-    if parsed.hostname in ("localhost", "127.0.0.1" , "0.0.0.0"):
-        raise ValueError("Fetching from localhost is not allowed.")
-    
-    logger.info("Fetching content from URL: %s", url)
-    
-    with httpx.Client(timeout=FETCH_TIMEOUT, follow_redirects=True) as http_client:
-        r = http_client.get(url, headers={"User-Agent": "PitchLensBot/1.0"})
+    current_url = url
+    for _ in range(MAX_REDIRECTS + 1):
+        parsed = urlparse(current_url)
+        if parsed.scheme not in ("http", "https"):
+            raise ValueError("Invalid URL scheme. Only http and https are allowed.")
+
+        hostname = parsed.hostname or ""
+        if hostname in ("localhost", "127.0.0.1", "0.0.0.0") or _is_private_host(hostname):
+            raise ValueError("Fetching from private or localhost addresses is not allowed.")
+
+        logger.info("Fetching content from URL: %s", current_url)
+
+        with httpx.Client(timeout=FETCH_TIMEOUT, follow_redirects=False) as http_client:
+            r = http_client.get(current_url, headers={"User-Agent": "PitchLensBot/1.0"})
+
+        if 300 <= r.status_code < 400 and r.headers.get("Location"):
+            next_url = urljoin(current_url, r.headers["Location"])
+            current_url = next_url
+            continue
+
         r.raise_for_status()
-        
+
         content_type = r.headers.get("Content-Type", "").lower()
         raw = r.content[:MAX_FETCH_BYTES]
         text = raw.decode(r.encoding or "utf-8", errors="replace")
-        
+
         if "text/html" in content_type:
             extracted = _basic_html_to_text(text)
-            
         else:
             extracted = re.sub(r"\s+", " ", text).strip()
-            
-    if len(extracted) < 50:
-        raise ValueError("Fetched content is too short to analyze.")
-    
-    return extracted
+
+        if len(extracted) < 50:
+            raise ValueError("Fetched content is too short to analyze.")
+
+        return extracted
+
+    raise ValueError("Too many redirects.")
     
 def _extract_json(text: str) -> dict:
     """
@@ -136,6 +330,9 @@ def _extract_json(text: str) -> dict:
 def run_gemini_analysis(message: str, tone: str, persona: str) -> AnalyzeResponse:
     logger.info("Calling Gemini for analysis...")
 
+    if not client:
+        raise RuntimeError("Gemini client not configured. Check GOOGLE_API_KEY.")
+
     prompt = f"""
 {GEMINI_SYSTEM_PROMPT}
 
@@ -147,7 +344,7 @@ Message:
 """
 
     response = client.models.generate_content(
-        model="models/gemini-2.5-flash",
+        model=GENAI_MODEL,
         contents=prompt
     )
 
@@ -271,8 +468,34 @@ def run_simple_analysis(message: str, tone: str, persona: str) -> AnalyzeRespons
         insights=insights,
     )
 
-@app.post("/analyze", response_model=AnalyzeResponse)
-async def analyze_message(request: AnalyzeRequest):
+
+def _analysis_to_response(analysis: Analysis) -> AnalysisRecordResponse:
+    return AnalysisRecordResponse(
+        id=analysis.id,
+        created_at=analysis.created_at,
+        tone=analysis.tone,
+        persona=analysis.persona,
+        message=analysis.message,
+        url=analysis.url,
+        score=analysis.score,
+        clarity=analysis.clarity,
+        emotion=analysis.emotion,
+        credibility=analysis.credibility,
+        market_effectiveness=analysis.market_effectiveness,
+        suggestion=analysis.suggestion,
+        insights=analysis.insights,
+    )
+
+@app.post("/analyze", response_model=AnalysisRecordResponse)
+async def analyze_message(
+    request: AnalyzeRequest,
+    http_request: Request,
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_current_user_id),
+):
+    if RATE_LIMIT_PER_MINUTE > 0:
+        key = user_id or (http_request.client.host if http_request.client else "anonymous")
+        _enforce_rate_limit(key)
     # Log the incoming request
     logger.info("Analyze request received | tone=%s persona=%s has_message=%s has_url=%s",
                 request.tone, request.persona,bool(request.message), bool(request.url))
@@ -323,8 +546,69 @@ async def analyze_message(request: AnalyzeRequest):
     
     logger.info("Analysis completed | Score: %d, clarity= %d, emotion= %d, credibility= %d, market_effectiveness= %d",
                 result.score, result.clarity, result.emotion, result.credibility, result.market_effectiveness)
-                
-    return result
+
+    analysis = Analysis(
+        owner_id=user_id,
+        message=message if message else None,
+        url=url if url else None,
+        tone=request.tone,
+        persona=request.persona,
+        score=result.score,
+        clarity=result.clarity,
+        emotion=result.emotion,
+        credibility=result.credibility,
+        market_effectiveness=result.market_effectiveness,
+        suggestion=result.suggestion,
+        insights=result.insights,
+    )
+    db.add(analysis)
+    db.commit()
+    db.refresh(analysis)
+
+    return _analysis_to_response(analysis)
+
+
+@app.get("/analyses/latest", response_model=AnalysisRecordResponse)
+async def get_latest_analysis(
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_current_user_id),
+):
+    query = db.query(Analysis)
+    if user_id:
+        query = query.filter(Analysis.owner_id == user_id)
+    analysis = query.order_by(Analysis.created_at.desc()).first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="No analyses found.")
+    return _analysis_to_response(analysis)
+
+
+@app.get("/analyses/{analysis_id}", response_model=AnalysisRecordResponse)
+async def get_analysis(
+    analysis_id: int,
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_current_user_id),
+):
+    query = db.query(Analysis).filter(Analysis.id == analysis_id)
+    if user_id:
+        query = query.filter(Analysis.owner_id == user_id)
+    analysis = query.first()
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found.")
+    return _analysis_to_response(analysis)
+
+
+@app.get("/analyses", response_model=List[AnalysisRecordResponse])
+async def list_analyses(
+    limit: int = 20,
+    db: Session = Depends(get_db),
+    user_id: Optional[str] = Depends(get_current_user_id),
+):
+    safe_limit = max(1, min(limit, 100))
+    query = db.query(Analysis)
+    if user_id:
+        query = query.filter(Analysis.owner_id == user_id)
+    analyses = query.order_by(Analysis.created_at.desc()).limit(safe_limit).all()
+    return [_analysis_to_response(item) for item in analyses]
 
 @app.get("/health")
 async def health_check():

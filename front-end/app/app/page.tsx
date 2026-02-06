@@ -2,20 +2,19 @@
 
 import { useState } from "react";
 import Link from "next/link";
-
-type AnalysisResult = {
-  score: number;
-  clarity: number;
-  emotion: number;
-  credibility: number;
-  market_effectiveness: number;
-  suggestion: string;
-  insights: string[];
-};
+import {
+  AnalysisPersona,
+  AnalysisResult,
+  AnalysisTone,
+  toneFromSlider,
+  toneLabel,
+} from "@/lib/analysis";
+import { ApiAnalysisRecord } from "@/lib/api";
+import { saveLastAnalysis } from "@/lib/storage";
 
 type AnalysisPayload = {
-  tone: "casual" | "professional";
-  persona: string;
+  tone: AnalysisTone;
+  persona: AnalysisPersona;
   message?: string;
   url?: string;
 };
@@ -26,63 +25,74 @@ export default function AppPage() {
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
   const [tone, setTone] = useState(50);
-  const [selectedPersona, setSelectedPersona] = useState("expert");
+  const [selectedPersona, setSelectedPersona] = useState<AnalysisPersona>("expert");
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const handleAnalyze = async () => {
-  if (!inputText.trim() && !inputUrl.trim()) {
-    alert("Please enter text or a URL to analyze.");
-    return;
-  }
-
-  setAnalyzing(true);
-  setAnalyzed(false);
-
-  const payload: AnalysisPayload = {
-    tone: selectedPersona === "friendly" || selectedPersona === "casual" ? "casual" : "professional",
-    persona: selectedPersona,
-  };
-
-  if (inputText.trim()) payload.message = inputText.trim();
-  if (inputUrl.trim()) payload.url = inputUrl.trim();
-
-  try {
-    const res = await fetch("http://127.0.0.1:8000/analyze", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-   
-    });
-
-    if (!res.ok) {
-      const err = await res.json();
-      alert(err.detail?.[0]?.msg || "Analysis failed");
-      setAnalyzing(false);
+    if (!inputText.trim() && !inputUrl.trim()) {
+      alert("Please enter text or a URL to analyze.");
       return;
     }
+    setAnalyzing(true);
+    setAnalyzed(false);
 
-    const data = await res.json();
-    console.log("Analysis result:", data);
+    const payload: AnalysisPayload = {
+      tone: toneFromSlider(tone),
+      persona: selectedPersona,
+    };
 
-    setResult(data); // Store the result for later use
-    setAnalyzed(true);
+    if (inputText.trim()) payload.message = inputText.trim();
+    if (inputUrl.trim()) payload.url = inputUrl.trim();
 
-  } catch (error) {
-    console.error("Network error:", error);
-    alert("Network error: Could not reach backend");
-  }
+    const apiBase = process.env.NEXT_PUBLIC_API_BASE || "http://127.0.0.1:8000";
 
-  setAnalyzing(false);
-};
+    try {
+      const res = await fetch(`${apiBase}/analyze`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        alert(err?.detail || "Analysis failed");
+        return;
+      }
+
+      const data = (await res.json()) as ApiAnalysisRecord;
+      setResult(data);
+      setAnalyzed(true);
+      saveLastAnalysis({
+        id: data.id,
+        score: data.score,
+        clarity: data.clarity,
+        emotion: data.emotion,
+        credibility: data.credibility,
+        market_effectiveness: data.market_effectiveness,
+        suggestion: data.suggestion,
+        insights: data.insights,
+        input: {
+          message: payload.message,
+          url: payload.url,
+        },
+        tone: data.tone ?? payload.tone,
+        persona: data.persona ?? payload.persona,
+        createdAt: data.created_at || new Date().toISOString(),
+      });
+    } catch (error) {
+      console.error("Network error:", error);
+      alert("Network error: Could not reach backend");
+    } finally {
+      setAnalyzing(false);
+    }
+  };
 
 
-  const personas = [
+  const personas: { id: AnalysisPersona; name: string; emoji: string }[] = [
     { id: "expert", name: "Professional", emoji: "👔" },
     { id: "friendly", name: "Friendly", emoji: "😊" },
-    { id: "technical", name: "Technical", emoji: "💻" },
-    { id: "casual", name: "Casual", emoji: "👋" },
     { id: "authoritative", name: "Authoritative", emoji: "💼" },
   ];
 
@@ -328,7 +338,7 @@ export default function AppPage() {
                   />
                   <div className="text-center">
                     <span className="inline-block px-4 py-2 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-full text-sm font-semibold">
-                      {tone < 30 ? "Formal" : tone < 70 ? "Balanced" : "Casual"}
+                      {toneLabel(tone)}
                     </span>
                   </div>
                 </div>
@@ -362,7 +372,14 @@ export default function AppPage() {
 
             {/* Action Buttons */}
             <div className="flex justify-center gap-4">
-              <button className="px-8 py-3 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-full font-semibold hover:shadow-xl transition-all hover:scale-105">
+              <button
+                onClick={() => {
+                  if (result?.suggestion) {
+                    setInputText(result.suggestion);
+                  }
+                }}
+                className="px-8 py-3 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-full font-semibold hover:shadow-xl transition-all hover:scale-105"
+              >
                 Apply Rewrite
               </button>
               <Link

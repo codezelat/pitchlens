@@ -1,111 +1,152 @@
-# PitchLens Backend - FastAPI Analysis Service
+# PitchLens Backend (FastAPI)
 
-This backend provides the analysis engine for PitchLens, a message intelligence tool. It uses FastAPI with Python to perform AI-powered message analysis, including scoring for clarity, emotional resonance, credibility, and market effectiveness.
+FastAPI service for PitchLens analysis, storage, and retrieval.
 
-## Purpose
+## Features
 
-The backend serves as the API layer that:
-- Receives message text or URLs from the front-end
-- Performs natural language processing and analysis
-- Returns structured JSON responses with scores, suggestions, and insights
-- Supports tone/persona adjustments and rewrite generation
+- Text and URL analysis endpoint (`/analyze`).
+- Optional Gemini-backed scoring with deterministic fallback.
+- Persisted analysis records via SQLAlchemy.
+- Analysis history endpoints (`/analyses`, `/analyses/latest`, `/analyses/{id}`).
+- Optional JWT auth enforcement.
+- Basic SSRF protections for URL ingestion.
+- Optional per-user/IP rate limiting.
 
-## Prerequisites
+## Tech Stack
 
-- Python 3.8+
-- pip (Python package manager)
+- FastAPI
+- SQLAlchemy 2
+- Alembic
+- httpx
+- Pydantic v2
 
-## Installation & Setup
+## Setup
 
-1. Navigate to the back-end directory:
-   ```bash
-   cd back-end
-   ```
+```bash
+cd back-end
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env
+```
 
-2. Create a virtual environment (recommended):
-   ```bash
-   python -m venv venv
-   # Activate on Windows
-   venv\Scripts\activate
-   # Activate on macOS/Linux
-   source venv/bin/activate
-   ```
+For local testing tools:
 
-3. Install dependencies:
-   ```bash
-   pip install fastapi uvicorn
-   # Add other dependencies as needed (e.g., transformers, torch for AI models)
-   ```
+```bash
+pip install -r requirements-dev.txt
+```
 
-4. Run the development server:
-   ```bash
-   uvicorn app:app --reload
-   ```
+Run server:
 
-The API will be available at `http://localhost:8000`
+```bash
+uvicorn app:app --reload --port 8000
+```
+
+Health check:
+
+```bash
+curl http://127.0.0.1:8000/health
+```
+
+## Environment Variables
+
+- `GOOGLE_API_KEY`: Optional Gemini API key.
+- `GENAI_MODEL`: Optional Gemini model id.
+- `DATABASE_URL`: DB URL. Default `sqlite:///./pitchlens.db`.
+- `ALLOWED_ORIGINS`: Comma-separated CORS origins.
+- `REQUIRE_AUTH`: Require bearer token validation when `true`.
+- `CLERK_ISSUER`: JWT issuer.
+- `CLERK_JWKS_URL`: Optional JWKS URL override.
+- `CLERK_AUDIENCE`: Optional JWT audience.
+- `JWKS_CACHE_TTL`: JWKS cache duration seconds.
+- `AUTO_CREATE_DB`: Auto-create/migrate minimal schema on startup for local dev.
+- `RATE_LIMIT_PER_MINUTE`: Requests/minute for `/analyze` per user or client IP.
+
+Reference values are in `back-end/.env.example`.
 
 ## API Endpoints
 
-### POST /analyze
-Analyzes a message and returns scoring and suggestions.
+### `POST /analyze`
 
-**Request Body:**
+Analyzes message input and persists the record.
+
+Request body:
+
 ```json
 {
-  "message": "Your message text here",
-  "tone": "professional",  // optional: professional, casual, enthusiastic, etc.
-  "persona": "expert"      // optional: expert, friendly, authoritative, etc.
+  "message": "Your message text",
+  "url": "https://example.com",
+  "tone": "professional",
+  "persona": "expert"
 }
 ```
 
-**Response:**
+Rules:
+- Either `message` or `url` is required.
+- `message/url extracted text` must be between 10 and 2000 chars.
+
+Response shape:
+
 ```json
 {
+  "id": 1,
+  "created_at": "2026-02-06T10:15:30Z",
+  "tone": "professional",
+  "persona": "expert",
+  "message": "...",
+  "url": null,
   "score": 84,
   "clarity": 92,
   "emotion": 80,
   "credibility": 78,
   "market_effectiveness": 85,
-  "suggestion": "Rewritten message with improved clarity and impact",
-  "insights": [
-    "Add specific metrics to increase credibility",
-    "Include a clear call-to-action",
-    "Use more emotional language to connect with audience"
-  ]
+  "suggestion": "Rewritten message",
+  "insights": ["...", "...", "..."]
 }
 ```
-## Running Tests
 
-Make sure you are inside the back-end folder and your virtual environment is activated.
+### `GET /analyses/latest`
+
+Returns latest analysis.
+
+### `GET /analyses/{analysis_id}`
+
+Returns one analysis by id.
+
+### `GET /analyses?limit=20`
+
+Returns latest `limit` analyses (1..100).
+
+### `GET /health`
+
+Returns service health metadata.
+
+## Database and Migrations
+
+Use Alembic for production:
 
 ```bash
 cd back-end
-pytest
-
-## Unit Testing
-
-PitchLens uses PyTest for backend testing.
-
-To run tests:
-
-1. Activate virtual environment
-2. Navigate to back-end folder
-3. Run:
-   pytest
-
-Current tests cover:
-- Short message scoring
-- Credibility boost from numbers & data
-- Emotional tone impact
-
-
-### GET /health
-Health check endpoint.
-
-**Response:**
-```json
-{
-  "status": "healthy",
-  "version": "1.0.0"
-}
+export AUTO_CREATE_DB=false
+alembic upgrade head
 ```
+
+Migration files:
+- `back-end/alembic/env.py`
+- `back-end/alembic/versions/`
+
+## Tests
+
+```bash
+cd back-end
+python -m pytest -q
+```
+
+Current tests validate deterministic fallback scoring behavior.
+Tests also include API endpoint smoke coverage for `/analyze` and `/analyses/latest`.
+
+## Operational Notes
+
+- If Gemini call fails, fallback analysis is returned.
+- URL fetch blocks localhost/private addresses and limits redirects.
+- Request IDs are attached via `X-Request-ID` response header.
