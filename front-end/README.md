@@ -57,8 +57,9 @@ front-end/
 
 - `/badges`
   - Fetches latest analysis (`GET /analyses/latest`) with local fallback.
-  - Builds badge markup using latest `score`.
+  - Builds badge markup using latest `score` with hero/compact/minimal style selection.
   - Supports SVG download and PNG rasterization via canvas.
+  - Supports one-click social sharing (X/LinkedIn) and embed-code copy.
 
 ## API Integration Contract
 
@@ -123,12 +124,13 @@ npm run start
 
 ## Error Handling Behavior
 
-- `/app` shows `alert()` when:
+- `/app` shows an inline error banner when:
   - no input was provided,
   - backend returned non-OK response,
   - network request failed.
 
 - `/dashboard` and `/badges` avoid hard failure by using local fallback state.
+- Local fallback views include a cache timestamp warning and stale-data indicator.
 
 ## UX Notes
 

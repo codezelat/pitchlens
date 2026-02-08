@@ -4,19 +4,34 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnalysisRecord } from "@/lib/analysis";
 import { fetchLatestAnalysis } from "@/lib/api";
-import { getLastAnalysis } from "@/lib/storage";
+import { getLastAnalysisSnapshot } from "@/lib/storage";
+
+type BadgeStyle = "hero" | "compact" | "minimal";
 
 export default function BadgesPage() {
   const [selectedFormat, setSelectedFormat] = useState<"png" | "svg">("png");
+  const [selectedStyle, setSelectedStyle] = useState<BadgeStyle>("hero");
   const [copied, setCopied] = useState(false);
+  const [copyError, setCopyError] = useState<string | null>(null);
   const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
+  const [cacheSavedAt, setCacheSavedAt] = useState<string | null>(null);
+  const [cacheIsStale, setCacheIsStale] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
     const load = async () => {
       const latest = await fetchLatestAnalysis();
       if (!isMounted) return;
-      setAnalysis(latest || getLastAnalysis());
+      if (latest) {
+        setAnalysis(latest);
+        setCacheSavedAt(null);
+        setCacheIsStale(false);
+        return;
+      }
+      const snapshot = getLastAnalysisSnapshot();
+      setAnalysis(snapshot?.record ?? null);
+      setCacheSavedAt(snapshot?.savedAt ?? null);
+      setCacheIsStale(Boolean(snapshot?.isStale));
     };
     load();
     return () => {
@@ -25,26 +40,59 @@ export default function BadgesPage() {
   }, []);
 
   const marketResonanceScore = analysis?.score ?? 0;
+  const getBadgeDimensions = (style: BadgeStyle) => {
+    if (style === "compact") return { width: 220, height: 84 };
+    if (style === "minimal") return { width: 260, height: 90 };
+    return { width: 360, height: 200 };
+  };
 
-  const embedCode = `<div style="display: inline-block; padding: 20px; background: linear-gradient(135deg, #4B3CDB, #6C5CE7); border-radius: 16px; color: white; font-family: system-ui, -apple-system, sans-serif; text-align: center; box-shadow: 0 10px 25px rgba(75, 60, 219, 0.3);">
+  const buildEmbedCode = (score: number, style: BadgeStyle) => {
+    if (style === "compact") {
+      return `<div style="display:inline-flex;align-items:center;gap:10px;padding:12px 16px;background:#4B3CDB;border-radius:12px;color:#fff;font-family:system-ui,-apple-system,sans-serif">
+  <strong style="font-size:18px;line-height:1">${score}</strong>
+  <span style="font-size:13px;opacity:.9">PitchLens Score</span>
+</div>`;
+    }
+    if (style === "minimal") {
+      return `<div style="display:inline-block;padding:10px 14px;border:2px solid #4B3CDB;border-radius:10px;color:#4B3CDB;font-family:system-ui,-apple-system,sans-serif;font-weight:700">
+  Score: ${score}
+</div>`;
+    }
+    return `<div style="display: inline-block; padding: 20px; background: linear-gradient(135deg, #4B3CDB, #6C5CE7); border-radius: 16px; color: white; font-family: system-ui, -apple-system, sans-serif; text-align: center; box-shadow: 0 10px 25px rgba(75, 60, 219, 0.3);">
   <div style="font-size: 14px; opacity: 0.9; margin-bottom: 8px;">Market Resonance Score</div>
-  <div style="font-size: 48px; font-weight: bold; margin-bottom: 4px;">${marketResonanceScore}</div>
+  <div style="font-size: 48px; font-weight: bold; margin-bottom: 4px;">${score}</div>
   <div style="font-size: 12px; opacity: 0.8;">Verified by PitchLens</div>
 </div>`;
+  };
 
-  const badgeWidth = 360;
-  const badgeHeight = 200;
+  const embedCode = buildEmbedCode(marketResonanceScore, selectedStyle);
 
-  const getBadgeSvg = (score: number) => {
+  const getBadgeSvg = (score: number, style: BadgeStyle) => {
+    const { width, height } = getBadgeDimensions(style);
+    if (style === "compact") {
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="${width}" height="${height}" rx="14" fill="#4B3CDB"/>
+  <text x="28" y="52" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="30" font-weight="700">${score}</text>
+  <text x="88" y="50" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="13" opacity="0.9">PitchLens Score</text>
+</svg>`;
+    }
+    if (style === "minimal") {
+      return `<?xml version="1.0" encoding="UTF-8"?>
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect x="1.5" y="1.5" width="${width - 3}" height="${height - 3}" rx="12" stroke="#4B3CDB" stroke-width="3"/>
+  <text x="26" y="56" fill="#4B3CDB" font-family="Arial, sans-serif" font-size="28" font-weight="700">Score: ${score}</text>
+</svg>`;
+    }
     return `<?xml version="1.0" encoding="UTF-8"?>
-<svg width="${badgeWidth}" height="${badgeHeight}" viewBox="0 0 ${badgeWidth} ${badgeHeight}" fill="none" xmlns="http://www.w3.org/2000/svg">
+<svg width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" fill="none" xmlns="http://www.w3.org/2000/svg">
   <defs>
     <linearGradient id="grad" x1="0" y1="0" x2="1" y2="1">
       <stop offset="0%" stop-color="#4B3CDB"/>
       <stop offset="100%" stop-color="#6C5CE7"/>
     </linearGradient>
   </defs>
-  <rect width="${badgeWidth}" height="${badgeHeight}" rx="24" fill="url(#grad)"/>
+  <rect width="${width}" height="${height}" rx="24" fill="url(#grad)"/>
   <text x="50%" y="52" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="14" text-anchor="middle" opacity="0.9">Market Resonance Score</text>
   <text x="50%" y="118" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="64" font-weight="700" text-anchor="middle">${score}</text>
   <text x="50%" y="160" fill="#FFFFFF" font-family="Arial, sans-serif" font-size="12" text-anchor="middle" opacity="0.85">Verified by PitchLens</text>
@@ -61,20 +109,20 @@ export default function BadgesPage() {
     URL.revokeObjectURL(url);
   };
 
-  const downloadPng = (svg: string) => {
+  const downloadPng = (svg: string, width: number, height: number) => {
     const image = new Image();
     const svgBlob = new Blob([svg], { type: "image/svg+xml;charset=utf-8" });
     const url = URL.createObjectURL(svgBlob);
     image.onload = () => {
       const canvas = document.createElement("canvas");
-      canvas.width = badgeWidth;
-      canvas.height = badgeHeight;
+      canvas.width = width;
+      canvas.height = height;
       const ctx = canvas.getContext("2d");
       if (!ctx) {
         URL.revokeObjectURL(url);
         return;
       }
-      ctx.drawImage(image, 0, 0, badgeWidth, badgeHeight);
+      ctx.drawImage(image, 0, 0, width, height);
       canvas.toBlob((blob) => {
         if (!blob) return;
         const link = document.createElement("a");
@@ -88,18 +136,38 @@ export default function BadgesPage() {
   };
 
   const handleCopyEmbed = () => {
-    navigator.clipboard.writeText(embedCode);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    setCopyError(null);
+    navigator.clipboard
+      .writeText(embedCode)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      })
+      .catch(() => {
+        setCopyError("Unable to copy automatically. Please copy the code manually.");
+      });
   };
 
   const handleDownload = (format: "png" | "svg") => {
-    const svg = getBadgeSvg(marketResonanceScore);
+    const svg = getBadgeSvg(marketResonanceScore, selectedStyle);
+    const { width, height } = getBadgeDimensions(selectedStyle);
     if (format === "svg") {
       downloadSvg(svg);
       return;
     }
-    downloadPng(svg);
+    downloadPng(svg, width, height);
+  };
+
+  const handleShare = (platform: "x" | "linkedin") => {
+    const appUrl = typeof window !== "undefined" ? window.location.origin : "https://pitchlens.app";
+    const shareText = `I scored ${marketResonanceScore}/100 on PitchLens message quality.`;
+    const targetUrl =
+      platform === "x"
+        ? `https://twitter.com/intent/tweet?text=${encodeURIComponent(
+            shareText,
+          )}&url=${encodeURIComponent(appUrl)}`
+        : `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(appUrl)}`;
+    window.open(targetUrl, "_blank", "noopener,noreferrer");
   };
 
   return (
@@ -145,6 +213,20 @@ export default function BadgesPage() {
           </p>
         </div>
 
+        {cacheSavedAt && (
+          <div
+            className={`mb-6 rounded-xl border p-4 text-sm ${
+              cacheIsStale
+                ? "border-amber-300 bg-amber-50 text-amber-900"
+                : "border-blue-200 bg-blue-50 text-blue-900"
+            }`}
+          >
+            Showing locally cached analysis from{" "}
+            {new Date(cacheSavedAt).toLocaleString()}
+            {cacheIsStale ? ". This badge may be based on stale data." : "."}
+          </div>
+        )}
+
         {!analysis && (
           <div className="mb-10 rounded-2xl border border-gray-200 bg-white p-6 text-center">
             <p className="text-gray-700 mb-4">
@@ -170,20 +252,37 @@ export default function BadgesPage() {
 
               {/* Badge Display */}
               <div className="flex items-center justify-center py-12 bg-gradient-to-br from-gray-50 to-gray-100 rounded-xl mb-6">
-                <div className="inline-block p-6 bg-gradient-to-br from-[#4B3CDB] to-[#6C5CE7] rounded-2xl shadow-2xl">
-                  <div className="text-center text-white">
-                    <div className="text-sm opacity-90 mb-2">
-                      Market Resonance Score
-                    </div>
-                    <div className="text-6xl font-bold mb-1">
-                      {marketResonanceScore}
-                    </div>
-                    <div className="text-xs opacity-80">
-                      Verified by PitchLens
+                {selectedStyle === "hero" && (
+                  <div className="inline-block p-6 bg-gradient-to-br from-[#4B3CDB] to-[#6C5CE7] rounded-2xl shadow-2xl">
+                    <div className="text-center text-white">
+                      <div className="text-sm opacity-90 mb-2">
+                        Market Resonance Score
+                      </div>
+                      <div className="text-6xl font-bold mb-1">
+                        {marketResonanceScore}
+                      </div>
+                      <div className="text-xs opacity-80">
+                        Verified by PitchLens
+                      </div>
                     </div>
                   </div>
-                </div>
+                )}
+                {selectedStyle === "compact" && (
+                  <div className="inline-flex items-center gap-3 px-4 py-3 bg-[#4B3CDB] rounded-xl shadow-xl">
+                    <div className="text-2xl font-bold text-white">{marketResonanceScore}</div>
+                    <div className="text-xs text-white/90">PitchLens Score</div>
+                  </div>
+                )}
+                {selectedStyle === "minimal" && (
+                  <div className="inline-flex items-center gap-2 px-4 py-2 border-2 border-[#4B3CDB] rounded-xl bg-white">
+                    <div className="text-[#4B3CDB] font-bold">Score:</div>
+                    <div className="text-[#4B3CDB] text-xl font-bold">{marketResonanceScore}</div>
+                  </div>
+                )}
               </div>
+              <p className="text-center text-xs text-gray-500 mb-6">
+                Active style: {selectedStyle}
+              </p>
 
               {/* Format Selection */}
               <div className="mb-6">
@@ -243,6 +342,22 @@ export default function BadgesPage() {
                 Other Badge Styles
               </h3>
               <div className="space-y-4">
+                {/* Hero Badge */}
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                  <div className="flex items-center gap-3">
+                    <div className="px-4 py-2 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-lg text-sm font-bold">
+                      {marketResonanceScore}
+                    </div>
+                    <span className="text-sm text-gray-700">Hero Style</span>
+                  </div>
+                  <button
+                    onClick={() => setSelectedStyle("hero")}
+                    className="text-[#4B3CDB] text-sm font-medium hover:underline"
+                  >
+                    {selectedStyle === "hero" ? "Using" : "Use This"}
+                  </button>
+                </div>
+
                 {/* Compact Badge */}
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                   <div className="flex items-center gap-3">
@@ -251,8 +366,11 @@ export default function BadgesPage() {
                     </div>
                     <span className="text-sm text-gray-700">Compact Style</span>
                   </div>
-                  <button className="text-[#4B3CDB] text-sm font-medium hover:underline">
-                    Use This
+                  <button
+                    onClick={() => setSelectedStyle("compact")}
+                    className="text-[#4B3CDB] text-sm font-medium hover:underline"
+                  >
+                    {selectedStyle === "compact" ? "Using" : "Use This"}
                   </button>
                 </div>
 
@@ -264,8 +382,11 @@ export default function BadgesPage() {
                     </div>
                     <span className="text-sm text-gray-700">Minimal Style</span>
                   </div>
-                  <button className="text-[#4B3CDB] text-sm font-medium hover:underline">
-                    Use This
+                  <button
+                    onClick={() => setSelectedStyle("minimal")}
+                    className="text-[#4B3CDB] text-sm font-medium hover:underline"
+                  >
+                    {selectedStyle === "minimal" ? "Using" : "Use This"}
                   </button>
                 </div>
               </div>
@@ -328,6 +449,11 @@ export default function BadgesPage() {
                   )}
                 </button>
               </div>
+              {copyError && (
+                <p className="mt-3 text-sm text-rose-700" role="alert">
+                  {copyError}
+                </p>
+              )}
             </div>
 
             {/* Usage Guidelines */}
@@ -415,7 +541,10 @@ export default function BadgesPage() {
                 Share Your Score
               </h3>
               <div className="flex gap-3">
-                <button className="flex-1 px-4 py-3 bg-[#1DA1F2] text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                <button
+                  onClick={() => handleShare("x")}
+                  className="flex-1 px-4 py-3 bg-[#1DA1F2] text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
                   <svg
                     className="w-5 h-5"
                     fill="currentColor"
@@ -423,9 +552,12 @@ export default function BadgesPage() {
                   >
                     <path d="M23.953 4.57a10 10 0 01-2.825.775 4.958 4.958 0 002.163-2.723c-.951.555-2.005.959-3.127 1.184a4.92 4.92 0 00-8.384 4.482C7.69 8.095 4.067 6.13 1.64 3.162a4.822 4.822 0 00-.666 2.475c0 1.71.87 3.213 2.188 4.096a4.904 4.904 0 01-2.228-.616v.06a4.923 4.923 0 003.946 4.827 4.996 4.996 0 01-2.212.085 4.936 4.936 0 004.604 3.417 9.867 9.867 0 01-6.102 2.105c-.39 0-.779-.023-1.17-.067a13.995 13.995 0 007.557 2.209c9.053 0 13.998-7.496 13.998-13.985 0-.21 0-.42-.015-.63A9.935 9.935 0 0024 4.59z" />
                   </svg>
-                  Twitter
+                  X / Twitter
                 </button>
-                <button className="flex-1 px-4 py-3 bg-[#0A66C2] text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2">
+                <button
+                  onClick={() => handleShare("linkedin")}
+                  className="flex-1 px-4 py-3 bg-[#0A66C2] text-white rounded-xl font-medium hover:shadow-lg transition-all flex items-center justify-center gap-2"
+                >
                   <svg
                     className="w-5 h-5"
                     fill="currentColor"

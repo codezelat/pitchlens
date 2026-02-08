@@ -30,6 +30,8 @@ def test_analyze_and_latest_endpoints_work():
         assert "id" in payload
         assert "score" in payload
         assert isinstance(payload.get("insights"), list)
+        assert isinstance(payload.get("analysis_meta"), dict)
+        assert payload["analysis_meta"].get("source") in {"gemini", "fallback"}
 
         latest = client.get("/analyses/latest")
         assert latest.status_code == 200

@@ -4,11 +4,13 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AnalysisRecord } from "@/lib/analysis";
 import { fetchAnalyses, fetchLatestAnalysis } from "@/lib/api";
-import { getLastAnalysis } from "@/lib/storage";
+import { getLastAnalysisSnapshot } from "@/lib/storage";
 
 export default function DashboardPage() {
   const [analysis, setAnalysis] = useState<AnalysisRecord | null>(null);
   const [recent, setRecent] = useState<AnalysisRecord[]>([]);
+  const [cacheSavedAt, setCacheSavedAt] = useState<string | null>(null);
+  const [cacheIsStale, setCacheIsStale] = useState(false);
 
   useEffect(() => {
     let isMounted = true;
@@ -18,11 +20,22 @@ export default function DashboardPage() {
       if (list.length > 0) {
         setRecent(list);
         setAnalysis(list[0]);
+        setCacheSavedAt(null);
+        setCacheIsStale(false);
         return;
       }
       const latest = await fetchLatestAnalysis();
       if (!isMounted) return;
-      setAnalysis(latest || getLastAnalysis());
+      if (latest) {
+        setAnalysis(latest);
+        setCacheSavedAt(null);
+        setCacheIsStale(false);
+        return;
+      }
+      const snapshot = getLastAnalysisSnapshot();
+      setAnalysis(snapshot?.record ?? null);
+      setCacheSavedAt(snapshot?.savedAt ?? null);
+      setCacheIsStale(Boolean(snapshot?.isStale));
     };
     load();
     return () => {
@@ -89,6 +102,20 @@ export default function DashboardPage() {
             Comprehensive analysis of your message performance
           </p>
         </div>
+
+        {cacheSavedAt && (
+          <div
+            className={`mb-6 rounded-xl border p-4 text-sm ${
+              cacheIsStale
+                ? "border-amber-300 bg-amber-50 text-amber-900"
+                : "border-blue-200 bg-blue-50 text-blue-900"
+            }`}
+          >
+            Showing locally cached analysis from{" "}
+            {new Date(cacheSavedAt).toLocaleString()}
+            {cacheIsStale ? ". This data may be outdated." : "."}
+          </div>
+        )}
 
         {!analysis && (
           <div className="mb-10 rounded-2xl border border-gray-200 bg-white p-6 text-center">

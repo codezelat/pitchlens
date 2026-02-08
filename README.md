@@ -15,13 +15,15 @@ This repository is organized as a monorepo with separate frontend and backend pr
 - Scoring dimensions: `clarity`, `emotion`, `credibility`, `market_effectiveness`, and `score`.
 - AI analysis via Gemini when configured.
 - Deterministic fallback analysis when Gemini is not configured or fails.
+- Structured analysis metadata (confidence, diagnostics, rewrite options, evidence needs).
 - Persistent storage for analysis records.
 - Analysis history endpoints.
 - Dashboard and badge pages backed by persisted API data, with local-storage fallback.
 - Badge download in both SVG and PNG formats.
 - Alembic migrations for schema management.
 - Optional bearer-token auth enforcement at API level.
-- Rate limiting for analyze requests.
+- Production startup guards for auth/rate-limit/model readiness.
+- Shared DB-backed rate limiting for analyze requests.
 - SSRF protections on URL ingestion.
 
 ## Repository Structure
@@ -112,7 +114,8 @@ File: `front-end/.env.local`
 File: `back-end/.env`
 
 - `GOOGLE_API_KEY`
-  - Optional. Enables Gemini analysis path.
+  - Required when running with `APP_ENV=production`.
+  - Enables Gemini analysis path.
 - `GENAI_MODEL`
   - Optional. Gemini model id.
   - Default: `models/gemini-2.5-flash`.
@@ -121,9 +124,15 @@ File: `back-end/.env`
   - Default: `sqlite:///./pitchlens.db`.
 - `ALLOWED_ORIGINS`
   - Comma-separated CORS allowlist.
+- `APP_ENV`
+  - `development` or `production`.
+  - Production mode enables stricter safety checks.
 - `REQUIRE_AUTH`
   - `true`/`false`.
   - When `true`, API requires bearer token and validates via JWKS.
+- `ALLOW_PUBLIC_API_IN_PROD`
+  - `true`/`false`.
+  - Emergency override that allows public API access in production.
 - `CLERK_ISSUER`
   - JWT issuer URL for token validation mode.
 - `CLERK_JWKS_URL`
@@ -192,18 +201,20 @@ python -m pytest -q
 ## Security Controls Implemented
 
 - URL scheme restriction: `http`/`https` only.
+- `https` enforcement in production mode for URL ingestion.
 - Local/private-network blocking for URL ingestion.
+- URL credential and non-standard port blocking on fetch path.
 - Redirect cap for URL fetching.
 - Optional JWT verification with JWKS caching.
-- Optional request rate limiting for `/analyze`.
+- Request rate limiting for `/analyze` (DB-backed with in-memory fallback).
+- Production startup guards for auth/rate-limit/model readiness.
 - Request correlation id via `X-Request-ID` response header.
 
 ## Known Constraints
 
 - Frontend does not currently provide a login UI/token acquisition flow.
 - If `REQUIRE_AUTH=true`, callers must supply valid bearer tokens externally.
-- Rate limiting is process-local (in-memory), not distributed.
-- Fallback analyzer returns variable insight count; Gemini path is constrained to 3 insights by prompt.
+- Frontend currently does not render advanced `analysis_meta` fields returned by backend.
 
 ## Troubleshooting
 

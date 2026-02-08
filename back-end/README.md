@@ -9,9 +9,11 @@ The backend is a FastAPI service that performs message analysis, persists result
 - Fetch and extract URL text when requested.
 - Run Gemini-backed analysis when configured.
 - Fallback to deterministic analysis when Gemini is unavailable/fails.
+- Normalize model output into a strict production schema.
+- Persist structured analysis metadata for diagnostics and explainability.
 - Persist normalized analysis records.
 - Serve latest and historical records.
-- Optionally enforce bearer-token authentication.
+- Enforce production safety checks for auth/rate-limit/model readiness.
 
 ## Stack
 
@@ -38,6 +40,7 @@ back-end/
     env.py
     versions/
       20260206_0001_create_analyses.py
+      20260208_0002_add_analysis_meta_and_rate_limit_events.py
   tests/
     test_analysis.py
     test_api.py
@@ -63,8 +66,13 @@ curl http://127.0.0.1:8000/health
 
 ## Environment Variables
 
+- `APP_ENV`
+  - `development` or `production`.
+  - In `production`, backend enforces stricter startup guards.
+
 - `GOOGLE_API_KEY`
-  - Optional. Enables Gemini analysis path.
+  - Required in production.
+  - Enables Gemini analysis path.
 
 - `GENAI_MODEL`
   - Optional. Gemini model id.
@@ -80,6 +88,10 @@ curl http://127.0.0.1:8000/health
 - `REQUIRE_AUTH`
   - `true` or `false`.
   - If `true`, requests must include a valid bearer token.
+
+- `ALLOW_PUBLIC_API_IN_PROD`
+  - `true` or `false`.
+  - Emergency override only. Allows public API access when `APP_ENV=production` and `REQUIRE_AUTH=false`.
 
 - `CLERK_ISSUER`
   - JWT issuer used for validation.
@@ -120,6 +132,15 @@ Columns:
 - `market_effectiveness`
 - `suggestion`
 - `insights` (JSON)
+- `analysis_meta` (JSON, nullable)
+- `created_at`
+
+Table: `rate_limit_events`
+
+Columns:
+- `id` (PK)
+- `key` (indexed)
+- `ts_epoch` (indexed)
 - `created_at`
 
 ## API Endpoints
@@ -149,6 +170,7 @@ Success response fields:
 - `id`, `created_at`, `tone`, `persona`, `message`, `url`
 - `score`, `clarity`, `emotion`, `credibility`, `market_effectiveness`
 - `suggestion`, `insights`
+- `analysis_meta` (source/confidence/diagnostics/rewrite options/evidence needs)
 
 ### `GET /analyses/latest`
 
@@ -171,7 +193,7 @@ Returns recent analyses.
 Returns:
 
 ```json
-{"status": "healthy", "version": "1.0.0"}
+{"status": "healthy", "version": "1.1.0", "env": "development|production"}
 ```
 
 ## Analysis Pipeline
@@ -181,7 +203,7 @@ Returns:
    - direct message, or
    - URL fetch + text extraction.
 3. Try Gemini analysis (`run_gemini_analysis`).
-4. On failure, fallback to deterministic analyzer (`run_simple_analysis`).
+4. On failure, fallback to deterministic analyzer (`run_simple_analysis_with_meta`).
 5. Persist analysis row.
 6. Return normalized response model.
 
@@ -189,6 +211,9 @@ Returns:
 
 The URL ingestion path enforces:
 - `http`/`https` schemes only.
+- `https` only when `APP_ENV=production`.
+- Blocks URLs with embedded credentials.
+- Restricts explicit ports to standard web ports (`80/443`).
 - Private, loopback, reserved, link-local, and multicast IP blocking.
 - `localhost`/`127.0.0.1`/`0.0.0.0` blocking.
 - Redirect limit (`MAX_REDIRECTS`).
@@ -212,7 +237,8 @@ When `REQUIRE_AUTH=false`:
 - Controlled by `RATE_LIMIT_PER_MINUTE`.
 - Applied to `/analyze`.
 - Key = user id (if authenticated) else client IP.
-- Current implementation is in-memory and process-local.
+- Primary implementation is DB-backed (`rate_limit_events`) to support multi-instance deployments sharing one DB.
+- In-memory fallback is used only if DB rate limiting fails unexpectedly.
 
 ## Database Migrations
 
@@ -220,6 +246,7 @@ Alembic config:
 - `alembic.ini`
 - `alembic/env.py`
 - `alembic/versions/20260206_0001_create_analyses.py`
+- `alembic/versions/20260208_0002_add_analysis_meta_and_rate_limit_events.py`
 
 Run migrations:
 
@@ -250,6 +277,5 @@ Current coverage includes:
 
 ## Known Constraints
 
-- Fallback analyzer insight count may differ from Gemini target shape.
-- In-memory rate limiting is not shared across multiple service instances.
+- Frontend currently does not render `analysis_meta` fields.
 - Frontend currently does not provide token acquisition UI for enforced auth mode.

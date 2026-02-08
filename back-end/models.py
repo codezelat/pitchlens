@@ -20,4 +20,14 @@ class Analysis(Base):
     market_effectiveness = Column(Integer, nullable=False)
     suggestion = Column(Text, nullable=False)
     insights = Column(JSON, nullable=False)
+    analysis_meta = Column(JSON, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+
+class RateLimitEvent(Base):
+    __tablename__ = "rate_limit_events"
+
+    id = Column(Integer, primary_key=True, index=True)
+    key = Column(String(255), index=True, nullable=False)
+    ts_epoch = Column(Integer, index=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

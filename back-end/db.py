@@ -19,6 +19,7 @@ class Base(DeclarativeBase):
 def init_db() -> None:
     Base.metadata.create_all(bind=engine)
     _ensure_owner_column()
+    _ensure_analysis_meta_column()
 
 
 def _ensure_owner_column() -> None:
@@ -40,6 +41,17 @@ def _ensure_owner_index(inspector) -> None:
         return
     with engine.begin() as conn:
         conn.execute(text("CREATE INDEX IF NOT EXISTS ix_analyses_owner_id ON analyses (owner_id)"))
+
+
+def _ensure_analysis_meta_column() -> None:
+    inspector = inspect(engine)
+    if "analyses" not in inspector.get_table_names():
+        return
+    columns = {col["name"] for col in inspector.get_columns("analyses")}
+    if "analysis_meta" in columns:
+        return
+    with engine.begin() as conn:
+        conn.execute(text("ALTER TABLE analyses ADD COLUMN analysis_meta JSON"))
 
 
 def get_db():

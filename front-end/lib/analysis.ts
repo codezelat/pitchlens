@@ -33,5 +33,5 @@ export const toneFromSlider = (value: number): AnalysisTone => {
 export const toneLabel = (value: number) => {
   if (value < 30) return "Formal";
   if (value < 70) return "Balanced";
-  return "Casual";
+  return "Enthusiastic";
 };

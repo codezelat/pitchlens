@@ -264,7 +264,7 @@ export default function Home() {
       {/* Footer */}
       <footer className="py-12 px-6 lg:px-8 bg-[#1C1A4A]">
         <div className="max-w-7xl mx-auto text-center text-white/60">
-          <p>&copy; 2025 PitchLens. All rights reserved.</p>
+          <p>&copy; {new Date().getFullYear()} PitchLens. All rights reserved.</p>
         </div>
       </footer>
     </div>

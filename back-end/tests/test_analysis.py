@@ -48,3 +48,12 @@ def test_enthusiastic_tone_raises_emotion():
     enthusiastic = run_simple_analysis(msg, tone="enthusiastic", persona="expert")
 
     assert enthusiastic.emotion > professional.emotion
+
+
+def test_fallback_output_is_structured_and_actionable():
+    msg = "We help teams improve onboarding and reduce support tickets."
+    result = run_simple_analysis(msg, tone="professional", persona="friendly")
+
+    assert len(result.insights) == 3
+    assert all(isinstance(item, str) and item.strip() for item in result.insights)
+    assert "Improved version:" not in result.suggestion

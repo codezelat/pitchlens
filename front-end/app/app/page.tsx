@@ -24,15 +24,17 @@ export default function AppPage() {
   const [inputUrl, setInputUrl] = useState("");
   const [analyzing, setAnalyzing] = useState(false);
   const [analyzed, setAnalyzed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [tone, setTone] = useState(50);
   const [selectedPersona, setSelectedPersona] = useState<AnalysisPersona>("expert");
   const [result, setResult] = useState<AnalysisResult | null>(null);
 
   const handleAnalyze = async () => {
     if (!inputText.trim() && !inputUrl.trim()) {
-      alert("Please enter text or a URL to analyze.");
+      setErrorMessage("Please enter text or a URL to analyze.");
       return;
     }
+    setErrorMessage(null);
     setAnalyzing(true);
     setAnalyzed(false);
 
@@ -57,7 +59,11 @@ export default function AppPage() {
 
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
-        alert(err?.detail || "Analysis failed");
+        const detail =
+          typeof err?.detail === "string"
+            ? err.detail
+            : "Analysis failed. Please review your input and try again.";
+        setErrorMessage(detail);
         return;
       }
 
@@ -83,7 +89,9 @@ export default function AppPage() {
       });
     } catch (error) {
       console.error("Network error:", error);
-      alert("Network error: Could not reach backend");
+      setErrorMessage(
+        "Network error: Could not reach backend. Check backend status and API base URL.",
+      );
     } finally {
       setAnalyzing(false);
     }
@@ -146,7 +154,10 @@ export default function AppPage() {
               </label>
               <textarea
                 value={inputText}
-                onChange={(e) => setInputText(e.target.value)}
+                onChange={(e) => {
+                  setInputText(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="Enter your message, pitch, or marketing copy here..."
                 className="w-full h-48 px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#4B3CDB] focus:border-transparent resize-none text-gray-900 placeholder-gray-400"
               />
@@ -160,7 +171,10 @@ export default function AppPage() {
               <input
                 type="url"
                 value={inputUrl}
-                onChange={(e) => setInputUrl(e.target.value)}
+                onChange={(e) => {
+                  setInputUrl(e.target.value);
+                  if (errorMessage) setErrorMessage(null);
+                }}
                 placeholder="https://example.com/your-content"
                 className="w-full px-4 py-3 rounded-xl border border-gray-300 focus:outline-none focus:ring-2 focus:ring-[#4B3CDB] focus:border-transparent text-gray-900 placeholder-gray-400 mb-4"
               />
@@ -174,11 +188,20 @@ export default function AppPage() {
             </div>
           </div>
 
+          {errorMessage && (
+            <div
+              className="mx-auto mb-6 max-w-3xl rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-900"
+              role="alert"
+            >
+              {errorMessage}
+            </div>
+          )}
+
           {/* Analyze Button */}
           <div className="flex justify-center">
             <button
               onClick={handleAnalyze}
-              disabled={analyzing || (!inputText && !inputUrl)}
+              disabled={analyzing || (!inputText.trim() && !inputUrl.trim())}
               className="px-12 py-4 bg-gradient-to-r from-[#4B3CDB] to-[#6C5CE7] text-white rounded-full font-semibold text-lg hover:shadow-2xl transition-all hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
             >
               {analyzing ? (
@@ -325,7 +348,7 @@ export default function AppPage() {
                 <div className="space-y-4">
                   <div className="flex justify-between text-sm text-gray-600 mb-2">
                     <span>Formal</span>
-                    <span>Casual</span>
+                    <span>Enthusiastic</span>
                   </div>
                   <input
                     type="range"
